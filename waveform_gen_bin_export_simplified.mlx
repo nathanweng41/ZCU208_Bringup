@@ -1,0 +1,140 @@
+% ------------------------------------------------------------------------------
+%   (c) Copyright 2018-2024 Advanced Micro Devices, Inc. All rights reserved.
+% 
+%   This file contains confidential and proprietary information
+%   of Advanced Micro Devices, Inc. and is protected under U.S. and
+%   international copyright and other intellectual property
+%   laws.
+% 
+%   DISCLAIMER
+%   This disclaimer is not a license and does not grant any
+%   rights to the materials distributed herewith. Except as
+%   otherwise provided in a valid license issued to you by
+%   AMD, and to the maximum extent permitted by applicable
+%   law: (1) THESE MATERIALS ARE MADE AVAILABLE \"AS IS\" AND
+%   WITH ALL FAULTS, AND AMD HEREBY DISCLAIMS ALL WARRANTIES
+%   AND CONDITIONS, EXPRESS, IMPLIED, OR STATUTORY, INCLUDING
+%   BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, NON-
+%   INFRINGEMENT, OR FITNESS FOR ANY PARTICULAR PURPOSE; and
+%   (2) AMD shall not be liable (whether in contract or tort,
+%   including negligence, or under any other theory of
+%   liability) for any loss or damage of any kind or nature
+%   related to, arising under or in connection with these
+%   materials, including for any direct, or any indirect,
+%   special, incidental, or consequential loss or damage
+%   (including loss of data, profits, goodwill, or any type of
+%   loss or damage suffered as a result of any action brought
+%   by a third party) even if such damage or loss was
+%   reasonably foreseeable or AMD had been advised of the
+%   possibility of the same.Wn requiring fail-safe
+%   performance, such as life-support or safety devices or
+%   systems, Class III medical devices, nuclear facilities,
+%   applications related to the deployment of airbags, or any
+%   other applications that could lead to death, personal
+%   injury, or severe property or environmental damage
+%   (individually and collectively, \"Critical
+%   Applications\"). Customer assumes the sole risk and
+%   liability of any use of AMD products in Critical
+%   Applications, subject only to applicable laws and
+%   regulations governing limitations on product liability.
+% 
+%   THIS COPYRIGHT NOTICE AND DISCLAIMER MUST BE RETAINED AS
+%   PART OF THIS FILE AT ALL TIMES.
+% ------------------------------------------------------------------------------
+%
+
+
+clc;       % clear command line
+clear all; % clear all workspace variables
+close all; % close all plots
+
+fs_converter = 9.8e9          % DAC Sample rate in Hz
+fc           = 200.0e6 % Target frequency for the tone.
+amplitude    = -5                % desired output amplitude in dBFS
+interpolation_rate = 1        % Interpolation setting for the DAC
+num_samples = 2^16            % The number of samples, 128kB
+num_bits = 2^15               % The number of bits of resolution
+
+MEM_BYTES = 131072; % 128kB BRAM Window
+bytes_per_sample = 2; 
+total_samples = MEM_BYTES / bytes_per_sample;
+
+samples_per_word = 32
+bytes_per_word = 64
+
+filedir = '..\out\'                                            % Relative directory for all data files 
+%filedir = 'C:\rfsoc\ex_des\zcu208\vm\out\'                    % Or use full path name
+%filename = [filedir 'rfsoc_9p8e9_377m_131072_-5db.csv'];       % Output CSV file, not used when running the design
+%filenamebin = [filedir 'rfsoc_9p8e9_377m_131072_-5db.bin'];    % Output bin file, not used when running the design
+filenamebin2 = [filedir 'dac_output_bramptr.bin'];                     % Output bin file, this is used when running the design
+%filenamebin3 = [filedir 'dac_output_dbfs.bin'];                % Output bin file for dBFS, not used when running the design
+
+fs = fs_converter/interpolation_rate;  % this accomodates for interpolation
+samples_per_cycle = fs / fc;
+
+% We want N such that:
+% 1) N is a multiple of 32
+% 2) N is a multiple of samples_per_cycle if samples_per_cycle is int.
+
+if abs(samples_per_cycle - round(samples_per_cycle)) > 1e-9
+    error("fs/fc is not an integer.")
+end
+
+rounded_samples_per_cycle = round(samples_per_cycle)
+N = lcm(samples_per_word, rounded_samples_per_cycle)
+
+m_cycles = N / rounded_samples_per_cycle
+
+beats = N / samples_per_word % 49 beats for 200 MHz
+stop_addr = (beats - 1) * bytes_per_word
+
+fprintf("fs = %.3f GHz\n", fs/1e9);
+fprintf("fc = %.3f MHz (EXACT)\n", fc/1e6);
+fprintf("samples_per_cycle = %d\n", rounded_samples_per_cycle);
+fprintf("Loop segment N = %d samples (%d cycles)\n", N, m_cycles);
+fprintf("beats = %d words (32 samples each)\n", beats);
+fprintf("start_addr = 0x%08X\n", uint32(0));
+fprintf("stop_addr  = 0x%08X\n", uint32(stop_addr));
+fprintf("Segment time = %.3f ns\n", (N/fs)*1e9);
+
+
+Make sine wave with the chosen frequency
+n = 0:(N-1);
+sig1 = sin(2*pi*fc*n/fs);
+sig2 = int16( round( sig1 / max(abs(sig1)) * (num_bits-1) * (10^(amplitude/20)) ) ); 
+% num_bits-1 to avoid rare overflow issue
+
+sig = sig2;
+
+reps = ceil(total_samples / N); % number of repeats
+sig_full = repmat(sig, 1, reps); % repeat to get full signal
+sig_full = sig_full(1:total_samples); % trim to exactly 65,536 samples
+
+% write waveform to the file
+
+fidbin2=fopen(filenamebin2,'w');
+fwrite(fidbin2,sig_full,'int16','ieee-le');
+fclose(fidbin2);
+
+% Plot one loop segment
+figure;
+plot(double(sig));
+title(sprintf("One loop segment: N=%d samples, %d cycles", N, m_cycles));
+xlabel("sample"); ylabel("int16");
+
+% Plot FFT
+f = (0:N-1)*(fs/N);
+x = double(sig);
+x = x - mean(x); % remove DC
+Y = fft(x);
+
+figure;
+plot(f(1:floor(N/2))/1e6, 20*log10(abs(Y(1:floor(N/2)))/max(abs(Y))));
+grid on; xlim([0 700]);
+ylim([-150 0]);
+title("FFT of one loop segment (windowed)");
+xlabel("MHz"); ylabel("dB");
+
+
+
+

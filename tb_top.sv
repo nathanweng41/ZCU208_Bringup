@@ -23,18 +23,15 @@
 module tb_top(
     );
     // ---- clocks / resets ----
-    logic PL_CLK_clk_p = 0;
-    logic PL_CLK_clk_n = 1; 
+    logic [0:0] PL_CLK_clk_p = 1'b0;
+    logic [0:0] PL_CLK_clk_n = 1'b1; 
     
-    real freq = 612.5e6;
-    real half_period = 1.0 / freq / 2.0; // Seconds
+    time half_period_t = 816ps; // ~612.5 MHz diff clock
     
-    initial begin
-        forever begin
-            #(half_period * 1e9);
-            PL_CLK_clk_p <= ~PL_CLK_clk_p;
-            PL_CLK_clk_n <= ~PL_CLK_clk_n;
-        end
+    always begin
+            #(half_period_t);
+            PL_CLK_clk_p[0] = ~PL_CLK_clk_p[0];
+            PL_CLK_clk_n[0] = ~PL_CLK_clk_n[0];
     end
     
     // ---- AXIS ----
@@ -66,13 +63,7 @@ module tb_top(
     import design_1_axi_vip_0_1_pkg::*;
     
     // declare <component_name>_mst_t agent
-    design_1_axi_vip_0_1_pkg_mst_t      mst_agent;
-    
-    // declare new agent
-    mst_agent = new("master vip agent", dut.design_1_i.axi_vip_0.inst.IF);
-   
-    //start_master
-    mst_agent.start_master();
+    design_1_axi_vip_0_1_mst_t      mst_agent;
     
     //generate transaction
     task automatic axi_write_512(input logic [31:0] addr, input logic [511:0] data);
@@ -96,22 +87,46 @@ module tb_top(
         end
     endtask
     
+    task automatic axi_write_32(input logic [31:0] addr, input logic [31:0] data32);
+        logic [511:0] data512;
+        data512 = '0;
+        data512[31:0] = data32;
+        axi_write_512(addr, data512);
+    endtask
+    
+    // Main Stimulus
     initial begin
         //Give clocks time to settle
         #200;
-    end
+        
+        // declare new agent
+        mst_agent = new("master vip agent", dut.design_1_i.axi_vip_0.inst.IF);
+   
+        //start_master
+        mst_agent.start_master();
+        
+        // Program GPIOs to start at 0
+        axi_write_32(GPIO_DAC_BASE, 32'h0000_0000);
+        axi_write_32(GPIO_START_BASE, 32'h0000_0000);
+        axi_write_32(GPIO_STOP_BASE, 32'h0000_0000);
+        
+        // Load BRAM (2 words)
+        axi_write_512(BRAM_BASE, 512'h0001_0002_0003_0004_0005_0006_0007_0008_0009_000A_000B_000C_000D_000E_000F_0010_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000);
+        axi_write_512(BRAM_BASE + 32'h0000_0040, 512'h1111_2222_3333_4444_5555_6666_7777_8888_9999_AAAA_BBBB_CCCC_DDDD_EEEE_FFFF_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000);
+        
+        // Set start/stop ptrs
+        axi_write_32(GPIO_START_BASE, 32'd0); // Start ptr
+        axi_write_32(GPIO_STOP_BASE, 32'h0000_0C00); // Stop ptr
+        
+        // Enable Uram
+        axi_write_32(GPIO_DAC_BASE, 32'h0000_0001);
     
+        // Wait and observe AXIS
+        #2000
+        
+        $display("axis_0_tvalid=%0d axis_0_tdata[31:0]=0x%08x",
+                  axis_0_tvalid, axis_0_tdata[31:0]);
     
-    always @(posedge PL_CLK_clk_p) begin
-        if (axis_0_tready) begin
-            $display("[%0t] AXIS beat: %h", $time, axis_0_tdata);
-           end
-    end
-    
-    initial begin 
-        repeat (50) @(posedge PL_CLK_clk_p);
-        $display("TB alive.");
-        repeat (2000) @(posedge PL_CLK_clk_p);
         $finish;
     end
 endmodule

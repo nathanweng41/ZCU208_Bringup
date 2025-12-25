@@ -58,6 +58,10 @@ module tb_top(
     localparam logic [31:0] GPIO_START_BASE = 32'h4001_0000;
     localparam logic [31:0] GPIO_STOP_BASE  = 32'h4002_0000;
     
+    // For GPIOs
+    localparam logic [31:0] GPIO_DATA = 32'h0;
+    localparam logic [31:0] GPIO_TRI  = 32'h4;
+    
     // Import AXI VIP Master Packages
     import axi_vip_pkg::*;
     import design_1_axi_vip_0_1_pkg::*;
@@ -73,7 +77,7 @@ module tb_top(
         // Size = log2(bytes_per_transfer). 64 bytes per transfer, so log2(64) = 6
         wr.set_write_cmd(addr,XIL_AXI_BURST_TYPE_INCR,0,6);
         // Byte mask
-        wr.set_strb({64{1'b1}});
+        //wr.set_strb({64{1'b1}});
         // Set single data beat
         wr.set_data_block(data);
         mst_agent.wr_driver.send(wr);
@@ -103,12 +107,17 @@ module tb_top(
         mst_agent = new("master vip agent", dut.design_1_i.axi_vip_0.inst.IF);
    
         //start_master
-        mst_agent.start_master();
+        mst_agent.start_master();   
+       
+        // Program TRIs to output 1
+        axi_write_32(GPIO_DAC_BASE + GPIO_TRI, 32'h0000_0000);
+        axi_write_32(GPIO_START_BASE + GPIO_TRI, 32'h0000_0000);
+        axi_write_32(GPIO_STOP_BASE + GPIO_TRI, 32'h0000_0000);
         
         // Program GPIOs to start at 0
-        axi_write_32(GPIO_DAC_BASE, 32'h0000_0000);
-        axi_write_32(GPIO_START_BASE, 32'h0000_0000);
-        axi_write_32(GPIO_STOP_BASE, 32'h0000_0000);
+        axi_write_32(GPIO_DAC_BASE + GPIO_DATA, 32'h0000_0000);
+        axi_write_32(GPIO_START_BASE + GPIO_DATA, 32'h0000_0000);
+        axi_write_32(GPIO_STOP_BASE + GPIO_DATA, 32'h0000_0000);
         
         // Load BRAM (2 words)
         axi_write_512(BRAM_BASE, 512'h0001_0002_0003_0004_0005_0006_0007_0008_0009_000A_000B_000C_000D_000E_000F_0010_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000);

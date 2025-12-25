@@ -57,6 +57,9 @@ module tb_top(
     localparam logic [31:0] GPIO_DATA = 32'h0;
     localparam logic [31:0] GPIO_TRI  = 32'h4;
     
+    // Readback for GPIO dbg
+    logic [31:0] rd;
+    
     // Import AXI VIP Master Packages
     import axi_vip_pkg::*;
     import design_1_axi_vip_0_1_pkg::*; // AXI4
@@ -93,6 +96,7 @@ module tb_top(
     task automatic axi_gpio_write(input logic [31:0] addr, input logic [31:0] data);
         xil_axi_resp_t resp;
         axilite_mst_agent.AXI4LITE_WRITE_BURST(addr, 0, data, resp);
+        $display("[%0t] AXIL WRITE   addr=0x%08x data=0x%08x resp=%0d", $time, addr, data, resp);
         if ( resp != XIL_AXI_RESP_OKAY ) 
             $display("AXI-Lite WRITE error resp=%0d @%0t", resp, $time);
     endtask
@@ -100,6 +104,7 @@ module tb_top(
     task automatic axi_gpio_read(input logic [31:0] addr, output logic [31:0] data);
         xil_axi_resp_t resp;
         axilite_mst_agent.AXI4LITE_READ_BURST(addr, 0, data, resp);
+        $display("[%0t] AXIL READ    addr=0x%08x data=0x%08x resp=%0d", $time, addr, data, resp);
         if ( resp != XIL_AXI_RESP_OKAY ) 
             $display("AXI-Lite READ error resp=%0d @%0t", resp, $time);
         
@@ -113,6 +118,8 @@ module tb_top(
         //Give clocks time to settle
         #200;
         
+        $display("[%0t] After 200 ns, starting masters", $time);
+        
         // declare new agent
         axi4_mst_agent = new("master vip agent (AXI FULL)", dut.design_1_i.axi_vip_0.inst.IF);
         axilite_mst_agent = new("master vip agent (AXILITE)", dut.design_1_i.axi_vip_1.inst.IF);
@@ -120,27 +127,33 @@ module tb_top(
         //start_master
         axi4_mst_agent.start_master();   
         axilite_mst_agent.start_master();
-       
-        // Program TRIs to output 1
-        axi_gpio_write(GPIO_DAC_BASE + GPIO_TRI, 32'h0000_0000);
-        axi_gpio_write(GPIO_START_BASE + GPIO_TRI, 32'h0000_0000);
-        axi_gpio_write(GPIO_STOP_BASE + GPIO_TRI, 32'h0000_0000);
         
         // Program GPIOs to start at 0
         axi_gpio_write(GPIO_DAC_BASE + GPIO_DATA, 32'h0000_0000);
+        axi_gpio_read(GPIO_DAC_BASE + GPIO_DATA, rd);
         axi_gpio_write(GPIO_START_BASE + GPIO_DATA, 32'h0000_0000);
+        axi_gpio_read(GPIO_START_BASE + GPIO_DATA, rd);
         axi_gpio_write(GPIO_STOP_BASE + GPIO_DATA, 32'h0000_0000);
-        
-        // Load BRAM (2 words)
-        axi_write_512(BRAM_BASE, 512'h0001_0002_0003_0004_0005_0006_0007_0008_0009_000A_000B_000C_000D_000E_000F_0010_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000);
-        axi_write_512(BRAM_BASE + 32'h0000_0040, 512'h1111_2222_3333_4444_5555_6666_7777_8888_9999_AAAA_BBBB_CCCC_DDDD_EEEE_FFFF_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000);
+        axi_gpio_read(GPIO_STOP_BASE + GPIO_DATA, rd);
         
         // Set start/stop ptrs
         axi_gpio_write(GPIO_START_BASE + GPIO_DATA, 32'd0); // Start ptr
+        $display("Start PTR Read:");
+        axi_gpio_read(GPIO_START_BASE + GPIO_DATA, rd);
+        
         axi_gpio_write(GPIO_STOP_BASE + GPIO_DATA, 32'h0000_0C00); // Stop ptr
+        $display("Stop PTR Read:");
+        axi_gpio_read(GPIO_STOP_BASE + GPIO_DATA, rd);
+        
+        $display("[%0t] Before BRAM write", $time);
+        // Load BRAM (2 words)
+        axi_write_512(BRAM_BASE, 512'h0001_0002_0003_0004_0005_0006_0007_0008_0009_000A_000B_000C_000D_000E_000F_0010_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000);
+        axi_write_512(BRAM_BASE + 32'h0000_0040, 512'h1111_2222_3333_4444_5555_6666_7777_8888_9999_AAAA_BBBB_CCCC_DDDD_EEEE_FFFF_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000);
+        $display("[%0t] After BRAM write", $time);
         
         // Enable Uram
         axi_gpio_write(GPIO_DAC_BASE + GPIO_DATA, 32'h0000_0001);
+        axi_gpio_read(GPIO_DAC_BASE + GPIO_DATA, rd);
     
         // Wait and observe AXIS
         #2000

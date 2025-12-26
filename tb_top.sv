@@ -35,7 +35,7 @@ module tb_top(
     end
     
     // ---- AXIS ----
-    logic axis_0_tready = 1'b1; // assert tready when declared so master can stream out
+    logic axis_0_tready; // assert tready when declared so master can stream out
     wire [511:0] axis_0_tdata;
     wire axis_0_tvalid;
     
@@ -73,18 +73,17 @@ module tb_top(
     task automatic axi_write_512(input logic [31:0] addr, input logic [511:0] data);
         axi_transaction wr;
         wr = axi4_mst_agent.wr_driver.create_transaction("512_write");
+        
+        // ID is not used; can be set to 0
         // Len = 0 means 1 burst (AXI Burst length - 1). We aren't doing AXI Burst here. 
         // Size = log2(bytes_per_transfer). 64 bytes per transfer, so log2(64) = 6
-        wr.set_write_cmd(addr,XIL_AXI_BURST_TYPE_INCR,0,6);
-        // Set Beat 0 data
-        wr.set_data_beat(0, data);
-        // Set Beat 0 strobe
-        wr.set_strb_beat(0, {64{1'b1}});
-        // Set single data beat
-        //wr.set_data_block(data);
+        wr.set_write_cmd(addr,XIL_AXI_BURST_TYPE_INCR,0,0,6);
+       
+        wr.set_data_block(data);
+
         axi4_mst_agent.wr_driver.send(wr);
-        axi4_mst_agent.wr_driver.wait_rsp(wr);
-        
+
+        //Don't wait for resp here, there are some timing issues with send. Just check wr.bresp.
         // Check response
         if (wr.bresp == 2'b00) begin
             $display("Write OK");

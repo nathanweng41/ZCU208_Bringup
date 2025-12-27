@@ -11,7 +11,7 @@
 // Tool Versions: 
 // Description: Use for behavioral simulation of pointer 
 // 
-// Dependencies: 
+// Dependencies: AXI VIP API
 // 
 // Revision:
 // Revision 0.01 - File Created
@@ -35,7 +35,7 @@ module tb_top(
     end
     
     // ---- AXIS ----
-    logic axis_0_tready; // assert tready when declared so master can stream out
+    logic axis_0_tready = 1; // assert tready when declared so master can stream out
     wire [511:0] axis_0_tdata;
     wire axis_0_tvalid;
     
@@ -57,15 +57,42 @@ module tb_top(
     localparam logic [31:0] GPIO_DATA = 32'h0;
     localparam logic [31:0] GPIO_TRI  = 32'h4;
     
+    // Declare bin file params
+    localparam int MEM_BYTES      = 131072;
+    localparam int BYTES_PER_WORD = 64; // 512 bits
+    localparam int NUM_WORDS      = MEM_BYTES / BYTES_PER_WORD; // 2048 words
+    
+    // Total bytes
+    byte unsigned bram_image [0:MEM_BYTES-1];
+    
+    // File I/O for BRAM Image
+    integer fd;
+    integer nread;
+    string bin_path;
+    
+    // Loading word in main stimulus
+    logic [511:0] word;
+    int idx;
+    
     // Readback for GPIO dbg
     logic [31:0] rd;
+    
+    // Readback for ptr dbg
+    logic [511:0] start_stream_word;
+    logic [511:0] stop_stream_word;
+    int beat_count;
+    bit capture_done;
+    bit uram_en;
+    
+    localparam int LOOP_STOP_ADDR = 32'h00000C00;
+    localparam int LOOP_STOP_WORD = LOOP_STOP_ADDR / BYTES_PER_WORD;
     
     // Import AXI VIP Master Packages
     import axi_vip_pkg::*;
     import design_1_axi_vip_0_1_pkg::*; // AXI4
     import design_1_axi_vip_1_0_pkg::*; // AXI-LITE for GPIOs
     
-    // declare <component_name>_mst_t agent
+    // Declare <component_name>_mst_t agent
     design_1_axi_vip_0_1_mst_t      axi4_mst_agent;
     design_1_axi_vip_1_0_mst_t      axilite_mst_agent;
     
@@ -109,8 +136,40 @@ module tb_top(
         
     endtask
     
+    // Prepare AXIS monitor to validate ptr behavior 
+    always @(posedge PL_CLK_clk_p[0]) begin
+        if(!capture_done && axis_0_tvalid && axis_0_tready && uram_en) begin
+            // First word after URAM enable
+            if (beat_count == 0) begin
+                start_stream_word <= axis_0_tdata;
+                $display("[%0t] STREAM START word (beat %0d) = %h", $time, beat_count, axis_0_tdata);
+            end
+            
+            // Word corresponding to stop_ptr
+            if (beat_count == LOOP_STOP_WORD) begin
+                stop_stream_word <= axis_0_tdata;
+                $display("[%0t] STREAM STOP word (beat %0d) = %h", $time, beat_count, axis_0_tdata);
+            end
+            
+            beat_count <= beat_count+1;
+            
+            if (beat_count == LOOP_STOP_WORD+1) begin
+                capture_done <= 1;
+                stop_stream_word <= axis_0_tdata;
+                $display("[%0t] STREAM STOP+1 word (beat %0d) = %h", $time, beat_count, axis_0_tdata);
+            end
+        end
+    end
+    
     // Main Stimulus
     initial begin
+    
+        // Vars for AXIS monitor
+        beat_count = 0;
+        capture_done = 0;
+        start_stream_word = '0;
+        stop_stream_word = '0;
+        uram_en = 0;
     
         $display("[%0t] TB entering main stimulus", $time);
         
@@ -119,13 +178,26 @@ module tb_top(
         
         $display("[%0t] After 200 ns, starting masters", $time);
         
-        // declare new agent
+        // Declare new agent
         axi4_mst_agent = new("master vip agent (AXI FULL)", dut.design_1_i.axi_vip_0.inst.IF);
         axilite_mst_agent = new("master vip agent (AXILITE)", dut.design_1_i.axi_vip_1.inst.IF);
    
-        //start_master
+        // Start_master
         axi4_mst_agent.start_master();   
         axilite_mst_agent.start_master();
+        
+        // Load BRAM image from MATLAB generated bin file. Flatten bin file into array. 
+        
+        bin_path = "dac_output_bramptr.bin";
+        
+        fd = $fopen(bin_path, "rb");
+        if (fd == 0) begin
+            $fatal(1, "Failed to open bin file '%s'", bin_path);
+        end
+        
+        nread = $fread(bram_image, fd);
+        $display("Read %0d bytes from %s", nread, bin_path);
+        $fclose(fd);
         
         // Program GPIOs to start at 0
         axi_gpio_write(GPIO_DAC_BASE + GPIO_DATA, 32'h0000_0000);
@@ -145,9 +217,19 @@ module tb_top(
         axi_gpio_read(GPIO_STOP_BASE + GPIO_DATA, rd);
         
         $display("[%0t] Before BRAM write", $time);
-        // Load BRAM (2 words)
-        axi_write_512(BRAM_BASE, 512'h0001_0002_0003_0004_0005_0006_0007_0008_0009_000A_000B_000C_000D_000E_000F_0010_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000);
-        axi_write_512(BRAM_BASE + 32'h0000_0040, 512'h1111_2222_3333_4444_5555_6666_7777_8888_9999_AAAA_BBBB_CCCC_DDDD_EEEE_FFFF_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000);
+        // Load BRAM 
+        // Loop over 2048 words (131,072 bytes)
+        for (int w = 0; w < NUM_WORDS; w++) begin
+            word = '0;
+           
+            for (int b = 0; b < BYTES_PER_WORD; b++) begin // 64 bytes per word
+                idx = w*BYTES_PER_WORD + b;
+                word[8*b +: 8] = bram_image[idx];
+            end
+            
+            //w*BYTES_PER_WORD is increment of 64
+            axi_write_512(BRAM_BASE + w*BYTES_PER_WORD, word);
+        end
         $display("[%0t] After BRAM write", $time);
         
         // Enable Uram
@@ -159,7 +241,6 @@ module tb_top(
         
         $display("axis_0_tvalid=%0d axis_0_tdata[31:0]=0x%08x",
                   axis_0_tvalid, axis_0_tdata[31:0]);
-    
-        $finish;
     end
+    
 endmodule

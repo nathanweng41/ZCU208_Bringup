@@ -21,7 +21,8 @@ filedir = '..\out\'                                            % Relative direct
 %filedir = 'C:\rfsoc\ex_des\zcu208\vm\out\'                    % Or use full path name
 %filename = [filedir 'rfsoc_9p8e9_377m_131072_-5db.csv'];       % Output CSV file, not used when running the design
 %filenamebin = [filedir 'rfsoc_9p8e9_377m_131072_-5db.bin'];    % Output bin file, not used when running the design
-filenamebin2 = [filedir 'dac_output_bramptr.bin'];                     % Output bin file, this is used when running the design
+filenamebin2 = [filedir 'dac_output_bramptr.bin']; % Output bin file, this is used when running the design
+filenameaxis = [filedir 'axis_stream.txt']
 %filenamebin3 = [filedir 'dac_output_dbfs.bin'];                % Output bin file for dBFS, not used when running the design
 
 fs = fs_converter/interpolation_rate;  % this accomodates for interpolation
@@ -90,6 +91,36 @@ ylim([-150 0]);
 title("FFT of one loop segment (windowed)");
 xlabel("MHz"); ylabel("dB");
 
+sim_samps = readmatrix(filenameaxis);
+sim_samps = double(sim_samps(:));
+
+N_sim = length(sim_samps);
+fprintf("Captured %d samples from AXIS stream\n", N_sim);
+
+t = (0:N_sim-1)/fs;
+figure;
+plot(t*1e9, sim_samps);
+xlabel('Time (ns)');
+ylabel('Amplitude (LSBs)');
+title('AXIS time-domain samples');
+
+x = sim_samps - mean(sim_samps); % remove DC
+X = fft(x);
+f = (0:N_sim-1) * fs / N_sim;
+half = 1:floor(N_sim/2);
+[~,kmax] = max(abs(X(half)));
+f0 = f(kmax);
+
+fprintf('Peak frequency ≈ %.3f MHz\n', f0/1e6);
+
+figure; 
+plot(f(half)/1e6, 20*log10(abs(X(half))/max(abs(X(half)))));
+grid on;
+xlim([0 700]);          % or wider if you like
+ylim([-150 0]);
+xlabel('Frequency (MHz)');
+ylabel('Magnitude (dB)');
+title('FFT of AXIS stream');
 
 
 

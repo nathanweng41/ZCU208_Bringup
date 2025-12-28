@@ -38,6 +38,9 @@ module tb_top(
     logic axis_0_tready = 1; // assert tready when declared so master can stream out
     wire [511:0] axis_0_tdata;
     wire axis_0_tvalid;
+    wire axis_clk;
+    
+    assign axis_clk = dut.design_1_i.uram_play_pointer_12_0.axis_clk;
     
     design_1_wrapper dut(
         .PL_CLK_clk_n(PL_CLK_clk_n),
@@ -137,7 +140,7 @@ module tb_top(
     endtask
     
     // Prepare AXIS monitor to validate ptr behavior 
-    always @(posedge PL_CLK_clk_p[0]) begin
+    always @(posedge axis_clk) begin
         if(!capture_done && axis_0_tvalid && axis_0_tready && uram_en) begin
             // First word after URAM enable
             if (beat_count == 0) begin
@@ -235,6 +238,7 @@ module tb_top(
         // Enable Uram
         axi_gpio_write(GPIO_DAC_BASE + GPIO_DATA, 32'h0000_0001);
         axi_gpio_read(GPIO_DAC_BASE + GPIO_DATA, rd);
+        uram_en = 1;
     
         // Wait and observe AXIS
         #2000

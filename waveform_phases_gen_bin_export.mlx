@@ -1,0 +1,171 @@
+% -------------------------------------------------------------------------------------------------------------------------------------------------------------
+%
+% Half cycle - K / 2 samples should be a multiple of 32 samples
+% K (samples) should be a multiple of 64
+% Samples per cycle should also be a multiple of 64
+% 
+% 
+% -------------------------------------------------------------------------------------------------------------------------------------------------------------
+clc;       % clear command line
+clear all; % clear all workspace variables
+close all; % close all plots
+
+fs_converter = 9.8e9          % DAC Sample rate in Hz
+amplitude    = -5                % desired output amplitude in dBFS
+interpolation_rate = 1        % Interpolation setting for the DAC
+num_samples = 2^16            % The number of samples, 128kB
+num_bits = 2^15               % The number of bits of resolution
+
+MEM_BYTES = 131072; % 128kB BRAM Window
+bytes_per_sample = 2
+bytes_per_word = 64
+total_samples = MEM_BYTES / bytes_per_sample;
+
+samples_per_word = bytes_per_word / bytes_per_sample
+
+filedir = '..\out\'                                            % Relative directory for all data files 
+%filedir = 'C:\rfsoc\ex_des\zcu208\vm\out\'                    % Or use full path name
+%filename = [filedir 'rfsoc_9p8e9_377m_131072_-5db.csv'];       % Output CSV file, not used when running the design
+%filenamebin = [filedir 'rfsoc_9p8e9_377m_131072_-5db.bin'];    % Output bin file, not used when running the design
+filenamebin2 = [filedir 'dac_output_bramptr_1_53M.bin']; % Output bin file, this is used when running the design
+filenameaxis = [filedir 'axis_stream.txt']
+%filenamebin3 = [filedir 'dac_output_dbfs.bin'];                % Output bin file for dBFS, not used when running the design
+
+fs = fs_converter/interpolation_rate;  % this accomodates for interpolation
+
+m = 100;
+K = 64*m; % now we have 6400 samples/cycle
+fc = fs / K; % now fc should be 1.53125 MHz
+
+samples_per_cycle       = K
+bytes_per_cycle         = samples_per_cycle * bytes_per_sample
+
+samples_per_half_cycle      = K / 2
+bytes_per_half_cycle        = bytes_per_cycle / 2
+
+% We want N samples such that:
+% 1) N is a multiple of 32
+% 2) N is a multiple of samples_per_cycle if samples_per_cycle is int
+
+N = lcm(samples_per_word, samples_per_cycle)
+m_cycles = N / samples_per_cycle
+
+% 100 beats for 1.53125 MHz
+beats_half = samples_per_half_cycle / samples_per_word
+beats_full = samples_per_cycle      / samples_per_word
+%beats = N / samples_per_word % 49 beats for 200 MHz
+
+% Set start addr = 0
+start_addr = 0;
+
+stop_addr_half = (beats_half - 1) * bytes_per_word
+stop_addr_full = (beats_full - 1) * bytes_per_word
+
+% --- DEBUG ---
+fprintf("\n=== Configuration ===\n");
+fprintf("effective fs          = %.3f GHz\n", fs/1e9);
+
+fprintf("\n=== Tone selection ===\n");
+fprintf("m                      = %d\n", m);
+fprintf("K (samples/cycle)      = %d (must be multiple of 64)\n", K);
+fprintf("fc (exact)             = %.6f MHz\n", fc/1e6);
+
+fprintf("\n=== Memory geometry ===\n");
+fprintf("bytes_per_sample       = %d\n", bytes_per_sample);
+fprintf("bytes_per_word         = %d\n", bytes_per_word);
+fprintf("samples_per_word       = %d\n", samples_per_word);
+fprintf("MEM_BYTES              = %d  (total_samples=%d)\n", MEM_BYTES, total_samples);
+
+fprintf("\n=== Segment lengths ===\n");
+fprintf("Full cycle:  samples=%d  bytes=%d  words=%d\n", ...
+        samples_per_cycle, bytes_per_cycle, beats_full);
+fprintf("Half cycle:  samples=%d  bytes=%d  words=%d\n", ...
+        samples_per_half_cycle, bytes_per_half_cycle, beats_half);
+fprintf("Generated N            = %d samples (%g cycles)\n", N, m_cycles);
+fprintf("Segment time (N/fs)     = %.3f us\n", (N/fs)*1e6);
+
+fprintf("\n=== Pointer settings (byte addresses) ===\n");
+fprintf("start_addr             = 0x%08X\n", uint32(start_addr));
+fprintf("stop_addr_full         = 0x%08X  (loops %d words = %d samples)\n", ...
+        uint32(stop_addr_full), beats_full, beats_full*samples_per_word);
+fprintf("stop_addr_half         = 0x%08X  (loops %d words = %d samples)\n\n", ...
+        uint32(stop_addr_half), beats_half, beats_half*samples_per_word);
+
+
+
+Make sine wave with the chosen frequency
+n = 0:(N-1);
+sig1 = sin(2*pi*fc*n/fs);
+sig2 = int16( round( sig1 / max(abs(sig1)) * (num_bits-1) * (10^(amplitude/20)) ) ); 
+
+sig = sig2;
+reps = ceil(total_samples / N);
+sig_full = repmat(sig, 1, reps);
+sig_full = sig_full(1:total_samples);
+
+% Write waveform to file
+fid = fopen(filenamebin2,'w');
+fwrite(fid, sig_full, 'int16', 'ieee-le');
+fclose(fid);
+
+% Helper function to convert address in bytes to samples
+function sample_idx = addr_to_sample(addr_bytes, bytes_per_sample)
+    sample_idx = (addr_bytes / bytes_per_sample) + 1;
+end
+
+function loop_segment = extract_loop_segment(bram, start_addr, stop_addr, bytes_per_sample, samples_per_word)
+    % Extract the looped segment given start/stop addresses
+    % stop_addr is the base byte address of the LAST word (inclusive)
+
+    start_sample = addr_to_sample(start_addr, bytes_per_sample);
+    stop_sample  = addr_to_sample(stop_addr,  bytes_per_sample) + samples_per_word - 1;
+
+    loop_segment = bram(start_sample : stop_sample);
+end
+
+loop_half = extract_loop_segment(sig_full, start_addr, stop_addr_half, bytes_per_sample, samples_per_word);
+loop_full = extract_loop_segment(sig_full, start_addr, stop_addr_full, bytes_per_sample, samples_per_word);
+
+num_loops = 200;
+dac_stream_half = repmat(loop_half, 1, num_loops);
+dac_stream_full = repmat(loop_full, 1, num_loops);
+
+
+figure;
+plot(double(dac_stream_full(1:5*length(loop_full))));
+title("DAC stream (Full-cycle pointer loop)");
+grid on;
+
+figure;
+plot(double(dac_stream_half(1:5*length(loop_half))));
+title("DAC stream (Half-cycle pointer loop)");
+grid on;
+
+function plot_fft(x, fs, fmax_mhz, plot_title)
+    x = double(x(:));
+    x = x - mean(x);
+
+    Nfft = length(x);
+    X = fft(x);
+
+    f = (0:floor(Nfft/2)-1) * (fs / Nfft);
+    mag = abs(X(1:floor(Nfft/2)));
+    mag = mag / max(mag);
+
+    figure;
+    plot(f/1e6, 20*log10(mag + 1e-20));
+    grid on;
+    xlim([0 fmax_mhz]);
+    ylim([-140 5]);
+    xlabel("Frequency (MHz)");
+    ylabel("Magnitude (dB)");
+    title(plot_title);
+end
+
+% FFTs
+plot_fft(dac_stream_full, fs, 50, "FFT: Full-cycle pointer loop");
+plot_fft(dac_stream_half, fs, 50, "FFT: Half-cycle pointer loop");
+
+
+
+

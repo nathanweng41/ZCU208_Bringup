@@ -108,6 +108,41 @@ fid = fopen(filenamebin2,'w');
 fwrite(fid, sig_full, 'int16', 'ieee-le');
 fclose(fid);
 
+pct_list = [0.10 0.25 0.5 0.75 1.00];
+total_beats_full = samples_per_cycle / samples_per_word; % should be 200 beats (words)
+
+num_loops = 200;
+
+for ii = 1:length(pct_list)
+    p = pct_list(ii);
+
+    beats_p = round( p * total_beats_full );
+    beats_p = max(1, min(total_beats_full, beats_p));
+
+    stop_addr_p = (beats_p - 1) * bytes_per_word;
+
+    loop_p = extract_loop_segment(sig_full, start_addr, stop_addr_p, bytes_per_sample, samples_per_word);
+
+    dac_stream_p = repmat(loop_p, 1, num_loops);
+
+    loop_len_samples = length(loop_p);
+    
+    fprintf("\n---%.0f%% of full-cycle ---\n", 100*p);
+    fprintf("beats_p            = %d words\n", beats_p);
+    fprintf("loop_len_samples   = %d samples\n", loop_len_samples);
+    fprintf("stop_addr_p        = 0x%08X\n", uint32(stop_addr_p));
+
+    figure;
+    plot(double(dac_stream_p(1:min(end,5*loop_len_samples))));
+    title(sprintf("DAC stream (%.0f%% loop): %d samples", 100*p, loop_len_samples));
+    grid on;
+    xlabel("Samples");
+    ylabel("Amplitude (LSB)");
+
+    plot_fft(dac_stream_p, fs, 50, sprintf("FFT: %.0f%% loop", 100*p));
+
+end
+
 % Helper function to convert address in bytes to samples
 function sample_idx = addr_to_sample(addr_bytes, bytes_per_sample)
     sample_idx = (addr_bytes / bytes_per_sample) + 1;
@@ -122,24 +157,6 @@ function loop_segment = extract_loop_segment(bram, start_addr, stop_addr, bytes_
 
     loop_segment = bram(start_sample : stop_sample);
 end
-
-loop_half = extract_loop_segment(sig_full, start_addr, stop_addr_half, bytes_per_sample, samples_per_word);
-loop_full = extract_loop_segment(sig_full, start_addr, stop_addr_full, bytes_per_sample, samples_per_word);
-
-num_loops = 200;
-dac_stream_half = repmat(loop_half, 1, num_loops);
-dac_stream_full = repmat(loop_full, 1, num_loops);
-
-
-figure;
-plot(double(dac_stream_full(1:5*length(loop_full))));
-title("DAC stream (Full-cycle pointer loop)");
-grid on;
-
-figure;
-plot(double(dac_stream_half(1:5*length(loop_half))));
-title("DAC stream (Half-cycle pointer loop)");
-grid on;
 
 function plot_fft(x, fs, fmax_mhz, plot_title)
     x = double(x(:));
@@ -161,10 +178,6 @@ function plot_fft(x, fs, fmax_mhz, plot_title)
     ylabel("Magnitude (dB)");
     title(plot_title);
 end
-
-% FFTs
-plot_fft(dac_stream_full, fs, 50, "FFT: Full-cycle pointer loop");
-plot_fft(dac_stream_half, fs, 50, "FFT: Half-cycle pointer loop");
 
 
 

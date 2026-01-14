@@ -1,0 +1,101 @@
+clc;       % clear command line
+clear all; % clear all workspace variables
+close all; % close all plots
+
+fs_converter = 9.8e9          % DAC Sample rate in Hz
+fc           = 196.0e6        % Target frequency for the tone.
+amplitude    = -5             % desired output amplitude in dBFS
+interpolation_rate = 1        % Interpolation setting for the DAC
+num_samples = 2^16            % The number of samples, 128kB
+num_bits = 2^15               % The number of bits of resolution
+
+MEM_BYTES = 131072; % 128kB BRAM Window
+bytes_per_sample = 2; 
+total_samples = MEM_BYTES / bytes_per_sample;
+
+samples_per_word = 32
+bytes_per_word = 64
+
+filedir = '..\out\'                                            % Relative directory for all data files 
+%filedir = 'C:\rfsoc\ex_des\zcu208\vm\out\'                    % Or use full path name
+%filename = [filedir 'rfsoc_9p8e9_377m_131072_-5db.csv'];       % Output CSV file, not used when running the design
+%filenamebin = [filedir 'rfsoc_9p8e9_377m_131072_-5db.bin'];    % Output bin file, not used when running the design
+filenamebin2 = [filedir 'dac_output_bramptr.bin']; % Output bin file, this is used when running the design
+filenameaxis = [filedir 'axis_stream.txt']
+%filenamebin3 = [filedir 'dac_output_dbfs.bin'];                % Output bin file for dBFS, not used when running the design
+
+fs = fs_converter/interpolation_rate;  % this accomodates for interpolation
+samples_per_cycle = fs / fc;
+
+% We want N such that:
+% 1) N is a multiple of 32
+% 2) N is a multiple of samples_per_cycle if samples_per_cycle is int.
+
+if abs(samples_per_cycle - round(samples_per_cycle)) > 1e-9
+    error("fs/fc is not an integer.")
+end
+
+rounded_samples_per_cycle = round(samples_per_cycle)
+N = lcm(samples_per_word, rounded_samples_per_cycle)
+
+m_cycles = N / rounded_samples_per_cycle
+
+beats = N / samples_per_word % 49 beats for 200 MHz
+stop_addr = (beats - 1) * bytes_per_word
+samples_played = beats * samples_per_word;
+
+fprintf("fs = %.3f GHz\n", fs/1e9);
+fprintf("fc = %.3f MHz (EXACT)\n", fc/1e6);
+fprintf("samples_per_cycle = %d\n", rounded_samples_per_cycle);
+fprintf("Loop segment N = %d samples (%d cycles)\n", N, m_cycles);
+fprintf("beats = %d words (32 samples each)\n", beats);
+fprintf("start_addr = 0x%08X\n", uint32(0));
+fprintf("stop_addr  = 0x%08X\n", uint32(stop_addr));
+fprintf("Segment time = %.3f ns\n", (N/fs)*1e9);
+
+
+% Make sine wave with chosen frequency 
+
+n = 0:(N-1);
+sig1 = sin(2*pi*fc*n/fs);
+sig2 = int16( round( sig1 / max(abs(sig1)) * (num_bits-1) * (10^(amplitude/20)) ) ); 
+% num_bits-1 to avoid rare overflow issue
+
+sig = sig2;
+
+reps = ceil(total_samples / N); % number of repeats
+sig_full = repmat(sig, 1, reps); % repeat to get full signal
+sig_full = sig_full(1:total_samples); % trim to exactly 65,536 samples
+
+% write waveform to the file
+
+fidbin2=fopen(filenamebin2,'w');
+fwrite(fidbin2,sig_full,'int16','ieee-le');
+fclose(fidbin2);
+
+% Plot one loop segment
+figure;
+plot(double(sig(1:samples_played)));
+title(sprintf("One loop segment: N=%d samples, (%d cycles)", samples_played, samples_played/rounded_samples_per_cycle));
+xlabel("sample"); ylabel("int16");
+
+% Plot FFT
+x = double(sig(1:samples_played));
+x = x - mean(x); % remove DC
+
+Nfft = length(x);
+f = (0:Nfft-1)*(fs/Nfft);
+Y = fft(x);
+
+
+mag_db = 20*log10(abs(Y(1:floor(Nfft/2))) + eps);     % avoid log10(0) = -Inf
+%mag_db = mag_db - max(mag_db);    % normalize so peak is 0 dB
+mag_db(~isfinite(mag_db)) = -200; % clamp any leftovers
+
+figure;
+plot(f(1:floor(Nfft/2))/1e6, mag_db);
+grid on; 
+xlim([0 700]);
+ylim([-150 0]);
+title("FFT of one BRAM loop segment");
+xlabel("MHz"); ylabel("dB");

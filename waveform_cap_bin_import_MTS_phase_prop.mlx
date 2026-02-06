@@ -1,0 +1,362 @@
+clc; %clear command line
+clear all; % clear all workspace variables
+close all; % close all plots
+
+format short eng;
+% Global parameters
+fc = 700e6; %user inputted
+decimation_rate = 1;
+numberOfSamples = 2^16
+
+% ADC parameters
+fs_adc = 4.9e9;
+fs_eff_adc = fs_adc/decimation_rate;
+sample_clock_period_adc = 1/fs_eff_adc
+samples_per_cycle_adc = fs_adc / fc
+
+% DAC parameters
+fs_dac = 9.8e9;
+amplitude = -5;
+num_bits = 2^15;
+
+MEM_BYTES = 131072; %128kB BRAM Window
+bytes_per_sample = 2;
+total_samples_dac = MEM_BYTES / bytes_per_sample;
+samples_per_cycle_dac = fs_dac/fc;
+% check if fs_dac/fc is integer
+if abs(samples_per_cycle_dac - round(samples_per_cycle_dac)) > 1e-9
+    error("fs_dac/fc is not integer (%.12f). Please adjust fc or fs_dac.", samples_per_cycle_dac);
+end
+samples_per_word = 32;
+bytes_per_word = samples_per_word * bytes_per_sample;
+
+N = lcm(samples_per_word, samples_per_cycle_dac);
+m_cycles_dac = N / samples_per_cycle_dac;
+
+beats = N / samples_per_word;
+stop_addr = (beats - 1) * bytes_per_word;
+samples_played = beats * samples_per_word;
+
+
+fprintf("DAC Parameters:\n");
+fprintf("fs = %.3f GHz\n", fs_dac/1e9);
+fprintf("fc = %.3f MHz (EXACT)\n", fc/1e6);
+fprintf("samples_per_cycle = %d\n", samples_per_cycle_dac);
+fprintf("Loop segment N = %d samples (%d cycles)\n", N, m_cycles_dac);
+fprintf("beats = %d words (32 samples each)\n", beats);
+fprintf("start_addr = 0x%08X\n", uint32(0));
+fprintf("stop_addr  = 0x%08X\n", uint32(stop_addr));
+fprintf("Segment time = %.3f ns\n", (N/fs_dac)*1e9);
+
+
+function [cycles_max, samples_max, num, denom, k_max] = maxIntegerCycles(numberOfSamples, samples_per_cycle_adc) 
+
+    [num,denom] = rat(samples_per_cycle_adc);
+
+    if num <= 0 || denom == 0
+        error('Invalid samples/cycle.');
+    end
+
+    k_max = floor(numberOfSamples / num);
+
+    cycles_max = k_max * denom;
+    samples_max = k_max * num;
+
+end
+
+[max_cycles_adc, max_samples_adc, p, q, k_max] = maxIntegerCycles(numberOfSamples, samples_per_cycle_adc);
+fprintf("Number of ADC Samples: %d", max_samples_adc);
+fprintf("Number of ADC Cycles: %d", max_cycles_adc);
+
+% Base directory for all source and output files
+filedir = '..\out\';
+
+% files for MTS ADC captures
+filebinsync0 = [filedir 'cap0.bin'];
+filebinsync1 = [filedir 'cap1.bin'];
+filebinsync2 = [filedir 'cap2.bin'];
+filebinsync3 = [filedir 'cap3.bin'];
+
+fidadc0=fopen(filebinsync0,'r');
+if fidadc0 < 0, error('Cannot open %s', filebinsync0); end
+fidadc1=fopen(filebinsync1,'r');
+if fidadc1 < 0, error('Cannot open %s', filebinsync0); end
+fidadc2=fopen(filebinsync2,'r');
+fidadc3=fopen(filebinsync3,'r');
+
+adc_ch0 = fread(fidadc0,max_samples_adc,'int16',0,'native');
+adc_ch1 = fread(fidadc1,max_samples_adc,'int16',0,'native');
+adc_ch2 = fread(fidadc2,max_samples_adc,'int16',0,'native');
+adc_ch3 = fread(fidadc3,max_samples_adc,'int16',0,'native');
+
+fclose(fidadc0);
+fclose(fidadc1);
+fclose(fidadc2);
+fclose(fidadc3);
+
+
+pk_pos = max(adc_ch0)
+pk_neg = min(adc_ch0)
+
+% ----------------- 
+% Periodogram Generation 
+% -----------------
+
+
+FS_pk = 32768; % Expected int16 full-scale peak
+adc_ch0_norm = double(adc_ch0) / FS_pk; % Normalize to full-scale
+adc_ch0_norm = adc_ch0_norm - mean(adc_ch0_norm); % Remove DC
+
+[pxx,f] = periodogram(adc_ch0_norm, [], max_samples_adc, fs_eff_adc, 'power');
+
+% computing SNDR - referencing Jun's code
+
+total_power_c = sum(pxx); % total power of the entire spectrum
+[~,kpk] = max(pxx);
+fpk = f(kpk);
+signal_power_c = pxx(kpk);
+noise_dist_power_c = total_power_c - signal_power_c; % everything but the signal power should be noise and distortion
+SNDR_dB = 10 * log10(signal_power_c / noise_dist_power_c);
+
+
+fprintf("Periodogram peak = %.6f MHz\n", fpk/1e6);
+fprintf("SNDR = %.6f dB\n", SNDR_dB);
+
+figure; 
+plot(f, 10*log10(pxx));
+
+% ----------------- 
+% Delay Calculation using FFT
+% -----------------
+
+x = double([adc_ch0(:), adc_ch1(:), adc_ch2(:), adc_ch3(:)]);
+x = x - mean(x, 1); % Average each column
+X0 = fft(x(:,1)); % average only ch0
+halfN = floor(max_samples_adc/2);
+
+mag0 = abs(X0(2:halfN));
+[~,mag_pk] = max(mag0);
+
+k = mag_pk + 1;
+f0_bin = (k-1)  * fs_eff_adc / max_samples_adc;
+X = fft(x);
+plot(X(:,1));
+phi_deg = rad2deg(angle(X(k,:)));
+
+dphi_deg = wrapTo180(phi_deg - phi_deg(1));
+
+dt = (dphi_deg/360) / f0_bin;   % seconds
+
+labels = {'ch0','ch1','ch2','ch3'};
+
+fprintf('\nPhase at f0 (deg):\n');
+for i = 1:4
+    fprintf('  %-3s: %+8.3f deg\n', labels{i}, phi_deg(i));
+end
+
+fprintf('\nPhase difference vs ch0 (deg):\n');
+for i = 1:4
+    fprintf('  %-3s - ch0: %+8.3f deg\n', labels{i}, dphi_deg(i));
+end
+
+fprintf('\nApprox time skew vs ch0 (ps):\n');
+for i = 1:4
+    fprintf('  %-3s: %+8.3f ps\n', labels{i}, dt(i)*1e12);
+end
+
+% ----------------
+% Delay Calculation using Auto-Correlation
+%-----------------
+x0_xcor = double(adc_ch0);
+x1_xcor = double(adc_ch1);
+x2_xcor = double(adc_ch2);
+x3_xcor = double(adc_ch3);
+
+x0_xcor = x0_xcor - mean(x0_xcor);
+x1_xcor = x1_xcor - mean(x1_xcor);
+x2_xcor = x2_xcor - mean(x2_xcor);
+x3_xcor = x3_xcor - mean(x3_xcor);
+
+% cross-correlation
+[c01, l01] = xcorr(x1_xcor, x0_xcor, 'coeff');
+[~, max_idx01] = max(c01);
+lag01 = l01(max_idx01);
+
+[c02, l02] = xcorr(x2_xcor, x0_xcor, 'coeff');
+[~, max_idx02] = max(c02);
+lag02 = l02(max_idx02);
+
+[c03, l03] = xcorr(x3_xcor, x0_xcor, 'coeff');
+[~, max_idx03] = max(c03);
+lag03 = l03(max_idx03);
+
+dt01 = lag01 / fs_adc;
+dt02 = lag02 / fs_adc;
+dt03 = lag03 / fs_adc;
+
+fprintf("dt lag ch1-ch0 = %.3f ps (lag=%d samples)\n", dt01*1e12, lag01);
+fprintf("dt lag ch3-ch0 = %.9f ps (lag=%d samples)\n", dt03*1e12, lag03);
+
+% ---------------
+% Delay Calculation using XOR Phase Detector
+% ----------------- 
+x0_xor = double(adc_ch0);
+x1_xor = double(adc_ch1);
+x2_xor = double(adc_ch2);
+x3_xor = double(adc_ch3);
+
+x0_xor = x0_xor - mean(x0_xor);
+x1_xor = x1_xor - mean(x1_xor);
+x2_xor = x2_xor - mean(x2_xor);
+x3_xor = x3_xor - mean(x3_xor);
+
+[phi01_mag_deg] = xor_phase_mag_deg(x0_xor, x1_xor);
+[phi02_mag_deg] = xor_phase_mag_deg(x0_xor, x2_xor);
+[phi03_mag_deg] = xor_phase_mag_deg(x0_xor, x3_xor);
+
+% determine sign from fft
+sgn01 = sign(dt(2));
+sgn02 = sign(dt(3));
+sgn03 = sign(dt(4));
+
+phi01_deg = wrapTo180(sgn01 * phi01_mag_deg);
+phi02_deg = wrapTo180(sgn02 * phi02_mag_deg);
+phi03_deg = wrapTo180(sgn03 * phi03_mag_deg);
+
+% time skew
+dt01_xor = (phi01_deg/360) / fc;
+dt02_xor = (phi02_deg/360) / fc;
+dt03_xor = (phi03_deg/360) / fc;
+
+fprintf('\nXOR PD lags');
+fprintf('ch1: phi=%.3f deg dt=%.3f ps\n', phi01_deg, dt01_xor*1e12);
+fprintf('ch2: phi=%.3f deg dt=%.3f ps\n', phi02_deg, dt02_xor*1e12);
+fprintf('ch3: phi=%.3f deg dt=%.3f ps\n', phi03_deg, dt03_xor*1e12);
+
+function [phi_mag_deg] = xor_phase_mag_deg(x_ref, x_sig)
+    x_ref = x_ref(:);
+    x_sig = x_sig(:);
+
+    ref_1 = (x_ref >= 0);
+    sig_1 = (x_sig >= 0);
+
+    x_xor = xor(ref_1, sig_1);
+
+    % mean duty cycle assuming phase diff is constant
+    duty = mean(x_xor);
+
+    phi_mag_rad = duty * pi;
+    phi_mag_deg = rad2deg(phi_mag_rad);
+end
+
+% Generate phase-corrected sinusoids and verify phase = 0 diff
+% -----------------
+k_tone = 1 + (N / samples_per_cycle_dac);   % exact FFT bin for fc
+
+phi_corr_deg = -wrapTo180(360 * fc .* dt(:).');
+phi_corr_rad = deg2rad(phi_corr_deg);
+
+n = 0:(N-1).'; % N x 1
+sigs_corr = zeros(N, 4); % 4 channels
+for i = 1:4 
+    sigs_corr(:,i) = sin(2*pi*fc*n/fs_dac + phi_corr_rad(i));
+end
+sigs_i16 = int16( round( sigs_corr ./ max(abs(sigs_corr)) * (num_bits-1) * (10^(amplitude/20))));
+
+reps = ceil(total_samples_dac / N);
+sigs_full = repmat(sigs_i16, reps, 1);
+sigs_full = sigs_full(1:total_samples_dac,:); % keep all 4 channels when truncating
+
+fn = {fullfile(filedir, 'sig_ch0_228_0.bin'), fullfile(filedir, 'sig_ch1_228_2.bin'), fullfile(filedir, 'sig_ch2_229_0.bin'), fullfile(filedir, 'sig_ch3_229_2.bin')};
+
+for i = 1:4
+    fidbin = fopen(fn{i}, 'w');
+    fwrite(fidbin, sigs_full(:,i), 'int16', 0, 'ieee-le');
+    fclose(fidbin);
+    fprintf("Wrote %s (%d samples)\n", fn{i}, total_samples_dac);
+end
+
+% -------- Verification of phase segment --------
+
+Xg = fft(double(sigs_i16));
+phi_gen_deg = rad2deg(angle(Xg(k_tone, :)));
+phi_gen_rel = wrapTo180(phi_gen_deg - phi_gen_deg(1));
+
+Xgf = fft(sigs_corr);   % float, no quantization
+phi_f = rad2deg(angle(Xgf(k_tone,:)));
+wrapTo180(phi_f - phi_f(1))
+
+fprintf("\nGenerated segment phase at fc-bin (deg):\n");
+for ch = 1:4
+    fprintf("  ch%d: %+8.3f deg (rel %+8.3f)\n", ch-1, phi_gen_deg(ch), phi_gen_rel(ch));
+end
+
+
+
+adc_ch0_t = array2table(adc_ch0);
+TT = table2timetable(adc_ch0_t,'SampleRate',fs_eff_adc);
+time = 0:1/fs_eff_adc:max_samples_adc/fs_eff_adc-1/fs_eff_adc;
+
+
+
+%%%%%%%%%%%%%%%%%%%%% Plot Both boards - 8 channels
+    plot(time,adc_ch0,'DisplayName','224 ch0','Color',[0.879 0.879 0.239]);hold on;...
+    plot(time,adc_ch1,'DisplayName','224 ch2','Color',[0.879 0.879 0.239]);hold on;...
+    plot(time,adc_ch2,'DisplayName','225 ch0','Color',[0.302 0.745 0.933]);hold on;...
+    plot(time,adc_ch3,'DisplayName','225 ch2','Color',[0.302 0.745 0.933]);hold off;...
+
+title('4 Channel Capture (2 Tiles on one board) in Time')
+xlabel('Time (ps)')
+ylabel(['Amplitude'])
+legend
+axis([0 max_samples_adc*1/fs_eff_adc/1600 -1.0e4 1.0e4]);
+ax = get(gca);
+ax.XAxis.Exponent = -12;
+%%%%%%%%%%%%%%%%%%%%%  Plot Both boards - 8 channels
+
+    plot(time,adc_ch0,'DisplayName','224 ch0','Marker','*','Color',[0.879 0.879 0.239]);hold on;...
+    plot(time,adc_ch1,'DisplayName','224 ch2','Marker','+','Color',[0.879 0.879 0.239]);hold on;...
+    plot(time,adc_ch2,'DisplayName','225 ch0','Marker','*','Color',[0.302 0.745 0.933]);hold on;...
+    plot(time,adc_ch3,'DisplayName','225 ch2','Marker','+','Color',[0.302 0.745 0.933]);hold off;...
+
+title('4 Channel Capture (2 Tiles on one board) in Time')
+xlabel('Time (ps)')
+ylabel(['Amplitude'])
+legend
+axis([0 (max_samples_adc)*1/fs_eff_adc/800 -1.5e4 1.5e4]);
+ax = get(gca);
+ax.XAxis.Exponent = -12;
+
+
+%%%%%%%%%%%%%%%%%%%%% Plot one boards - 4 channels
+
+    plot(time,adc_ch0,'DisplayName','224 ch0','Color',[0.879 0.879 0.239]);hold on;...
+    plot(time,adc_ch1,'DisplayName','224 ch2','Color',[0.879 0.879 0.239]);hold on;...
+    plot(time,adc_ch2,'DisplayName','225 ch0','Color',[0.302 0.745 0.933]);hold on;...
+    plot(time,adc_ch3,'DisplayName','225 ch2','Color',[0.302 0.745 0.933]);hold off;...
+
+title('4 Channel Capture (2 Tiles on one boards) - Zoomed in to one T1')
+xlabel('Time (ps)')
+ylabel(['Amplitude'])
+legend
+axis([0 1/fs_eff_adc -1e2 1e2]);
+ax = get(gca);
+ax.XAxis.Exponent = -12;
+
+
+%%%%%%%%%%%%%%%%%%%%% Plot one board - 4 channels
+
+    plot(time,adc_ch0,'DisplayName','224 ch0','Marker','+','Color',[0.879 0.879 0.239]);hold on;...
+    plot(time,adc_ch1,'DisplayName','224 ch2','Marker','*','Color',[0.879 0.879 0.239]);hold on;...
+    plot(time,adc_ch2,'DisplayName','225 ch0','Marker','+','Color',[0.302 0.745 0.933]);hold on;...
+    plot(time,adc_ch3,'DisplayName','225 ch2','Marker','*','Color',[0.302 0.745 0.933]);hold off;...
+
+title('4 Channel Capture Zoomed in')
+xlabel('Time (ps)')
+ylabel(['Amplitude'])
+legend
+axis([0 1/fs_eff_adc -1e2 1e2]);
+ax = get(gca);
+ax.XAxis.Exponent = -12;
+
+s

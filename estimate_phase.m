@@ -67,6 +67,16 @@ end
 % ----------------- 
 
 function [dphi_deg, dt_sec, duty] = estimate_phase_xor_pd(ref, sig, fc, dt_sign_ref)
+% Inputs:
+%   ref: reference signal
+%   sig: signal to compare against
+%   fc: exepcted tone frequency
+%   dt_sign_ref: time skew used for sign of phase
+%   NOTE: ref and sig should be same length
+% Outputs:
+%   dphi_deg: phase difference (deg)
+%   dt_sec: time skew (sec)
+%   duty: duty cycle
 
 ref = double(ref(:)) - mean(ref);
 sig = double(sig(:)) - mean(sig);

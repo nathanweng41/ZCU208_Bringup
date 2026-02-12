@@ -101,6 +101,11 @@ classdef SerialClient < handle % Don't close this when script is done
             out = obj.sendLine("uramPlay", timeout_s);
         end
 
+        function out = uramStop(obj, timeout_s)
+            if nargin < 2, timeout_s = obj.DefaultTimeout_s; end
+            out = obj.sendLine("uramStop", timeout_s);
+        end
+
         function out = uramCap(obj, timeout_s) 
             if nargin < 2, timeout_s = obj.DefaultTimeout_s; end
             out = obj.sendLine("uramCap", timeout_s);

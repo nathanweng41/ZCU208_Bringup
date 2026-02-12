@@ -22,6 +22,13 @@ interpolation = 1;
 
 log_fn = "./phase_log_calibration.csv";
 
+s = SerialClient("COM13", 115200);
+s.open();
+disp(s.drain(2.0));
+
+disp(s.uramStop());
+pause(3);
+
 dphi1_apply = get_phase_correction(log_fn, "ch0-ch1", fc);
 dphi2_apply = get_phase_correction(log_fn, "ch0-ch2", fc);
 dphi3_apply = get_phase_correction(log_fn, "ch0-ch3", fc);
@@ -45,15 +52,9 @@ disp(X.downloadTone(fn_ch3, dac_ch3_addr));
 ptr_hex = "0x" + upper(string(dec2hex(uint32(stop_ch0), 8)));
 disp(X.setPtrs(ptr_hex));
 
-s = SerialClient("COM13", 115200);
-s.open();
-disp(s.drain(2.0));
-
 disp(s.uramPlay());
 pause(5);
 disp(s.uramCap());
-
-s.close();
 
 disp(X.readCapture());
 
@@ -108,7 +109,7 @@ function dphi_apply = get_phase_correction(log_fn, channel, fc)
     row = Tsel(end, :); % Select Latest Entry
 
     dphi_meas = double(row{1,dphi_col});
-    dphi_apply = wrapTo180(-dphi_meas);
+    dphi_apply = -dphi_meas; % already phase wrapped to 180
 end
 
 function log_phase_results(log_fn, fc, ch_pair, dphi_deg, dt_sec, lag_samp) 

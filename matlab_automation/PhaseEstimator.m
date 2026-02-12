@@ -59,7 +59,8 @@ classdef PhaseEstimator
         lag_samp = lags(max_idx);
         
         dt_sec = lag_samp / fs;
-        dphi_deg = wrapTo180(-360 * fc * dt_sec);
+
+        dphi_deg = wrapTo180(360 * fc * dt_sec);
         
         end
 

@@ -35,31 +35,52 @@ if ~isnumeric(dphi_deg)
     error('dphi_deg must be a number.');
 end
 
-samples_per_cycle = fs / fc;
-if abs(samples_per_cycle - round(samples_per_cycle)) > 1e-3
-    error("fs/fc is not an integer. fs/fc=%.12f. Choose fc so that samples_per_cycle is an integer.", samples_per_cycle);
+r = fs/fc;
+tol = 1e-9;
+
+[p, q] = rat(r, tol); 
+r_hat = p / q;
+ratio_err = abs(r - r_hat); 
+
+if ratio_err > tol
+    error("fs/fc must be rational within tol. Got fs/fc=%.15g, best p/q=%d/%d (%.15g), err=%.3g. Try a different fc.", r, p, q, r_hat, ratio_err);
 end
 
-samples_per_cycle = round(samples_per_cycle);
+base_samples = p;
+base_cycles = q;
 
 % We want N such that:
 % 1) N is a multiple of 32.
 % 2) N is a multiple of samples_per_cycle if samples_per_cycle is int.
 
-N = lcm(samples_per_word, samples_per_cycle); % minimum segment length needed in samples
-m_cycles = N / samples_per_cycle; % cycles from samples above
+N = lcm(samples_per_word, base_samples); % minimum segment length needed in samples
+
+N_max = 65536;
+if N > N_max
+    error("Loop segment exceeds max number of samples.");
+end
+
+m_cycles = (N*base_cycles) / base_samples; % cycles from samples above
+
+if abs(m_cycles - round(m_cycles)) > 0 
+    error("Internal error: m_cycles not integer. N=%d, p=%d, q=%d gave m_cycles=%.12f", N, p, q, m_cycles);
+end
+m_cycles = round(m_cycles);
+
+fc_exact = fs * (m_cycles / N);
+fprintf("Frequency used (fc_exact): %.3f MHz\n", fc_exact/1e6);
 
 beats = N / samples_per_word; 
 start_ptr = uint32(0);
 stop_ptr = uint32((beats-1) * bytes_per_word);
 
-k_tone = 1 + (N / samples_per_cycle); % bin k = MATLAB FFT (k+1) idx
+k_tone = 1 + m_cycles; % bin k = MATLAB FFT (k+1) idx
 
 % Signal Generation
 n = (0:N-1).'; % transpose into column
 phi_rad = deg2rad(dphi_deg);
 
-sig_float = sin(2*pi*fc*n/fs + phi_rad);
+sig_float = sin(2*pi*fc_exact*n/fs + phi_rad);
 sig_i16 = int16( round ( sig_float / max(abs(sig_float)) * (num_bits-1) * 10^(amplitude_dbfs/20) ));
 
 reps = ceil(total_samples / N);
@@ -67,8 +88,8 @@ sig_full = repmat(sig_i16, reps, 1);
 sig_full = sig_full(1:total_samples);
 
 filename = char(filename);
-[p,~,~] = fileparts(filename);
-if isempty(p)
+[path,~,~] = fileparts(filename);
+if isempty(path)
     fn = fullfile(filedir, filename);
 else
     fn = filename;
@@ -85,13 +106,13 @@ phi_i16_deg = NaN;
 
 if debug
     fprintf("fs = %.3f GHz\n", fs/1e9);
-    fprintf("fc = %.3f MHz (EXACT)\n", fc/1e6);
-    fprintf("samples_per_cycle = %d\n", samples_per_cycle);
+    fprintf("fc = %.3f MHz\n", fc/1e6);
+    fprintf("Samples_per_cycle = %.12f (p/q = %d/%d)\n", r_hat, base_samples, base_cycles);
     fprintf("Loop segment N = %d samples (%d cycles)\n", N, m_cycles);
     fprintf("beats = %d words (32 samples each)\n", beats);
     fprintf("start_addr = 0x%08X\n", uint32(start_ptr));
     fprintf("stop_addr = 0x%08X\n", uint32(stop_ptr));
-    fprintf("Segment time = %.3f ns\n", (N/fs) *1e9);
+    fprintf("Segment time = %.3f ns\n", (N/fs)*1e9);
 
     % Plot one loop segment
     figure;
@@ -119,6 +140,14 @@ if debug
     Xf = fft(sig_float);
     Xi = fft(double(sig_i16));
 
+    % FFT of sig float
+    Yf = fft(sig_float - mean(sig_float));
+    
+    figure;
+    plot((0:floor(N/2)-1)*(fs/N)/1e6, 20*log10(abs(Yf(1:floor(N/2)))+eps)); grid on;
+    title('FFT of float (should be single bin)');
+    xlabel('MHz'); ylabel('dB')
+
     phi_float_deg = rad2deg(angle(Xf(k_tone)));
     phi_i16_deg   = rad2deg(angle(Xi(k_tone)));
 
@@ -129,8 +158,14 @@ end
 % Rest of the information can be stored in fp
 fp = struct();
 fp.fs = fs;
-fp.fc = fc;
-fp.samples_per_cycle = samples_per_cycle;
+fp.fc_requested = fc;
+fp.fc_exact = fc_exact;
+fp.fs_over_fc_requested = r;
+fp.fs_over_fc_rational = r_hat;
+fp.p_samples = base_samples;
+fp.q_cycles = base_cycles;
+fp.ratio_err = ratio_err;
+
 fp.N = N;
 fp.m_cycles = m_cycles;
 fp.beats= beats;

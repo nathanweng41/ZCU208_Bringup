@@ -15,7 +15,7 @@ host = "127.0.0.1";
 port = 2000;
 
 % User Input
-fc = 11.2e6;
+fc = 300e6;
 amplitude_dbfs = -5;
 debug_dac = 0;
 debug_adc = 1;

@@ -86,13 +86,14 @@ classdef XsdbClient < handle % allows clearing of this object
         end
 
          % Sets stop ptrs
-        function resp = setPtrs(obj, ptrValue)
+        function resp = setPtrs(obj,addr, ptrValue)
             resp = "";
             resp = resp + "Setting ptrs" + newline;
-            resp = resp + obj.mwr("0xA0110000", ptrValue, 2.0); % s00 on Vivado, Tile 228_0 on board
-            resp = resp + obj.mwr("0xA00E0000", ptrValue, 2.0); % s02 on Vivado, Tile 228_2 on board
-            resp = resp + obj.mwr("0xA00F0000", ptrValue, 2.0); % s10 on Vivado, Tile 229_0 on board
-            resp = resp + obj.mwr("0xA0100000", ptrValue, 2.0); % s12 on Vivado, Tile 229_2 on board
+            resp = resp + obj.mwr(string(addr), ptrValue, 2.0);
+            %resp = resp + obj.mwr("0xA0110000", ptrValue, 2.0); % s00 on Vivado, Tile 228_0 on board
+            %resp = resp + obj.mwr("0xA00E0000", ptrValue, 2.0); % s02 on Vivado, Tile 228_2 on board
+            %resp = resp + obj.mwr("0xA00F0000", ptrValue, 2.0); % s10 on Vivado, Tile 229_0 on board
+            %resp = resp + obj.mwr("0xA0100000", ptrValue, 2.0); % s12 on Vivado, Tile 229_2 on board
             resp = resp + "Successfully finished setting ptrs" + newline;
         end
 

@@ -16,15 +16,15 @@ port = 2000;
 fs_adc = 4.9e9;
 
 % User Input (keep same as initial calibration)
-fc = 200e6;
+fc = 1e6;
 amplitude_dbfs = -5;
 debug_dac = 0;
 debug_adc = 1;
 interpolation = 1;
 
-log_fn = "./phase_log_calibration.csv";
+log_fn = "./out/phase_log_calibration.csv";
 
-s = SerialClient("COM13", 115200);
+s = SerialClient("COM5", 115200);
 s.open();
 disp(s.drain(2.0));
 
@@ -52,7 +52,10 @@ disp(X.downloadTone(fn_ch2, dac_ch2_addr));
 disp(X.downloadTone(fn_ch3, dac_ch3_addr));
 
 ptr_hex = "0x" + upper(string(dec2hex(uint32(stop_ch0), 8)));
-disp(X.setPtrs(ptr_hex));
+disp(X.setPtrs("0xA0110000",ptr_hex));
+disp(X.setPtrs("0xA00E0000",ptr_hex));
+disp(X.setPtrs("0xA00F0000",ptr_hex));
+disp(X.setPtrs("0xA0100000",ptr_hex));
 
 disp(s.uramPlay());
 pause(5);

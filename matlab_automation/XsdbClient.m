@@ -100,7 +100,7 @@ classdef XsdbClient < handle % allows clearing of this object
         % This function shouldn't change much (capture)
         function resp = readCapture(obj, outDir, timeout_s)
             if nargin < 2 || isempty(outDir)
-                outDir = "../out";
+                outDir = "./out";
             end
             if nargin < 3 || isempty(timeout_s)
                 timeout_s = (obj.Timeout_s + 10);

@@ -81,7 +81,7 @@ classdef PhaseEstimator
         
         end
 
-        function [dphi_deg, dt_sec, lag_samp, fs_ds] = estimate_phase_xcorr_filtered(ref, sig, fc, fs)
+        function [dphi_deg, dt_sec, lag_samp, fs_ds, ref_ds, sig_ds] = estimate_phase_xcorr_filtered(ref, sig, fc, fs)
             ref = double(ref(:)) - mean(ref);
             sig = double(sig(:)) - mean(sig);
 

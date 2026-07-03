@@ -17,6 +17,8 @@ module samples_per_symbol_counter #() (
 	 // High only when a valid baseband sample is produced
 	 input wire sample_en,
 	 
+	 input wire valid_en,
+	 
 	 // Number of valid samples per symbol
 	 input wire [15:0] symbol_period,
 	 
@@ -45,7 +47,7 @@ module samples_per_symbol_counter #() (
 				symbol_advance <= 1'b0;
 			end else begin	
 				// Only count valid samples
-				if (sample_en) begin
+				if (sample_en && valid_en) begin
 					if (symbol_period <= 1) begin
 						count <= {16{1'b0}};
 						symbol_advance <= 1'b1;

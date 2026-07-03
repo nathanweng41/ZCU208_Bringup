@@ -23,12 +23,12 @@ module sample_enable_counter #(
 	 output wire sample_en
    );
    
+     assign sample_en = enable && (count != PERIOD-1);
+     
 	 initial begin
 		$display("*****************************************************");
 		$display("XXXXXX COUNTER_PERIOD                      = %d", PERIOD);
 	 end
-	 
-	 assign sample_en = enable && (count != PERIOD-1);
 	 
 	 always @(posedge clk) begin
 		if (!rstn) begin	

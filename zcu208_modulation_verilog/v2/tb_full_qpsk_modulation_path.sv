@@ -70,8 +70,7 @@ module tb_full_qpsk_modulation_path;
     wire uram_play_tready;
 	assign uram_play_tready = dut.full_baseband_sim_i.uram_play_modulation_0.axis_tready;
 	
-	
-	
+    // AXI address map
 	localparam logic [31:0] BRAM_BASE		 = 32'hC000_0000;
 	localparam logic [31:0] GPIO_START_BASE  = 32'h4000_0000;
 	localparam logic [31:0] GPIO_STOP_BASE   = 32'h4001_0000;
@@ -82,12 +81,17 @@ module tb_full_qpsk_modulation_path;
 	
 	localparam int BYTES_PER_WORD = 64;
 	localparam int TEST_WORDS	  = 8;
+
+    // Stop address is last valid 512-bit word address
 	localparam int STOP_ADDR	  = (TEST_WORDS-1) * BYTES_PER_WORD;
 	
-	localparam int SYMBOL_PERIOD = 244;
+    // 2 complex samples per QPSK symbol
+    // Baseband sample rate = 160 MHz
+    // Symbol rate = 160 MHz / 2 = 80 MSym/s
+	localparam int SYMBOL_PERIOD = 2;
 	
-	localparam signed [15:0] AMP_POS = 16'sd16000;
-	localparam signed [15:0] AMP_NEG = -16'sd16000;
+	localparam signed [15:0] AMP_POS = 16'sd10000;
+	localparam signed [15:0] AMP_NEG = -16'sd10000;
 	
 	import axi_vip_pkg::*;
 	import full_baseband_sim_axi_vip_0_0_pkg::*;
@@ -140,26 +144,92 @@ module tb_full_qpsk_modulation_path;
         end
     endtask	
 	
-	// Packed BPSK test data
-	// word=010101... from bit 0 upward
-	
-	function automatic logic [511:0] make_bpsk_word(input bit invert);
+	// QPSK test word generator
+    //
+    // Packing convention:
+    //
+    // symbol 0 = word[1:0]
+    // symbol 1 = word[3:2]
+    // ...
+    // symbol 255 = word[511:510]
+    //
+    // Symbol mapping expected by QPSK mapper:
+    // 00 -> +I + Q
+    // 01 -> -I + Q
+    // 11 -> -I - Q
+    // 10 -> +I - Q
+	// 
+
+    function automatic logic [1:0] qpsk_sym_pattern(input int sym_idx, input bit invert);
+        logic [1:0] sym;
+        begin
+           case (sym_idx % 4)
+                0: sym = 2'b00;
+                1: sym = 2'b01;
+                2: sym = 2'b11;
+                3: sym = 2'b10;
+                default: sym=2'b00;
+            endcase
+
+            if (invert) begin
+                case (sym)
+                    2'b00: sym = 2'b11;
+                    2'b01: sym = 2'b10;
+                    2'b11: sym = 2'b00;
+                    2'b10: sym = 2'b01;
+                    default: sym=2'b00;
+                endcase
+            end
+
+            return sym;
+        end
+    endfunction
+
+	function automatic logic [511:0] make_qpsk_word(input bit invert);
 		logic [511:0] w;
+        logic [1:0] sym;
 		begin
-			for (int i = 0; i < 512; i++) begin
-				if (!invert)
-					w[i] = (i%2); //bit sequence 0, 1, 0, 1,...
-				else
-					w[i] = ~(i%2); //bit sequence 1, 0, 1, 0,...
+            // One word is 512 bits, 256 symbols, 2 bits per symbol
+            w = 512'd0;
+            
+			for (int i = 0; i < 256; i++) begin
+				sym = qpsk_sym_pattern(i, invert);
+                w[i*2 +: 2] = sym;
 			end
+
 			return w;
 		end
 	endfunction
 	
+    // Returns expected I/Q amplitudes for a given QPSK symbol
+    function automatic void expected_iq_from_sym(input logic [1:0] sym, output logic signed [15:0] exp_i, output logic signed [15:0] exp_q);
+        begin
+            case (sym)
+                2'b00: begin 
+                    exp_i = AMP_POS; 
+                    exp_q = AMP_POS; 
+                end
+                2'b01: begin 
+                    exp_i = AMP_NEG; 
+                    exp_q = AMP_POS; end
+                2'b11: begin 
+                    exp_i = AMP_NEG; 
+                    exp_q = AMP_NEG; end
+                2'b10: begin 
+                    exp_i = AMP_POS; 
+                    exp_q = AMP_NEG; end
+                default: begin 
+                    exp_i = 0; 
+                    exp_q = 0; 
+                    end
+            endcase
+        end
+    endfunction
+
 	// Physical monitor variables
-	int sample_en_count;
 	int symbol_advance_count;
 	int packer_word_count;
+    int axis_clk_count;
 	
 	time last_symbol_advance_time;
 	time last_packer_word_time;
@@ -173,7 +243,8 @@ module tb_full_qpsk_modulation_path;
 	bit got_first_packer_word;
 	bit got_first_axis_clk;
 	
-	/* CLK DEBUG, seems okay so far so commenting it out
+
+    // Clk debug, use for first validation test, then comment out to reduce simulation output
 	
 	always @(posedge axis_clk) begin
 		if (!got_first_axis_clk) begin
@@ -183,22 +254,19 @@ module tb_full_qpsk_modulation_path;
 			axis_clk_period = $time - last_axis_clk_time;
 			last_axis_clk_time = $time;
 			
-			if (packer_word_count < 3) begin
+			if (axis_clk_count <= 10) begin
 				$display("[%0t] axis_clk period = %0t", $time, axis_clk_period);
 			end
-		end
-	end
 
-	*/
-	
-	// Count sample_en
-	always @(posedge axis_clk) begin
-		if (sample_en) begin
-			sample_en_count++;
+			if ((axis_clk_period < 6.0ns) || (axis_clk_period > 6.6ns)) begin
+				$display("ERROR: axis_clk period wrong: dt=%0t expected about 6.25ns for 160 MHz", axis_clk_period);
+				$finish(1);
+			end
 		end
 	end
 	
 	// Symbol rate monitor
+    // For SYMBOL_PERIOD = 2, we expect a symbol advance every 2 axis_clk cycles, or every 12.5 ns
 	always @(posedge axis_clk) begin
 		if (symbol_advance) begin
 			symbol_advance_count++;
@@ -206,7 +274,7 @@ module tb_full_qpsk_modulation_path;
 			if (!got_first_symbol_advance) begin
 				got_first_symbol_advance = 1'b1;
 				last_symbol_advance_time = $time;
-				$display("[%0t] first symbol advance", $time);
+				$display("[%0t] first symbol advance symbol_idx=%0d symbol=0x%0h word_loaded=%0b", $time, symbol_idx, unpacker_symbol, word_loaded);
 			end else begin
 				dt_symbol = $time - last_symbol_advance_time;
 				last_symbol_advance_time = $time;

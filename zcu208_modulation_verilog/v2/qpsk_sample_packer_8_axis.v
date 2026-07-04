@@ -29,7 +29,7 @@
 //
 //////////////////////////////////////////////////////////////////////////////////
 
-module qpsk_sample_packer_16_axis #(
+module qpsk_sample_packer_8_axis #(
 		   parameter integer SAMPLE_WIDTH = 16,
            parameter integer COMPLEX_WIDTH = 32,
            parameter integer COMPLEX_SAMPLES_PER_WORD = 8,
@@ -59,8 +59,6 @@ module qpsk_sample_packer_16_axis #(
 	 // If overflow is set to 1, output was not acccepted when a new packed word was ready
 	 output reg 						overflow
    );
-   
-   localparam integer COUNT_WIDTH = 3;
 
    reg [OUT_WIDTH-1:0] packed_reg;
 
@@ -109,7 +107,7 @@ always @(posedge axis_clk) begin
 					if (m_axis_tvalid && !m_axis_tready) begin
 						overflow <= 1;
 					end else begin
-						m_axis_tdata	<= {s_axis_tdata, packed_reg[223:0]}; // Put s_axis_tdata in [255:224]
+						m_axis_tdata	<= {s_axis_tdata, packed_reg[OUT_WIDTH-COMPLEX_WIDTH-1:0]}; // Put s_axis_tdata in [255:224]
 						m_axis_tvalid	<= 1'b1;
 					end
 					

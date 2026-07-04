@@ -87,7 +87,3 @@ module qpsk_mapper_axis (
 	 assign m_axis_tdata = {q_sample, i_sample};
 	 
 endmodule
-			
-
-  
-			

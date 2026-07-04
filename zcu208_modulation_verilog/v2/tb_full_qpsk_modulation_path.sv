@@ -379,15 +379,19 @@ module tb_full_qpsk_modulation_path;
 	logic [31:0] rd;
 	
 	initial begin
-		$display("[%0t] TB full modulation path START", $time);
+		$display("[%0t] TB full QPSK modulation path START", $time);
 		
-		sample_en_count				= 0;
 		symbol_advance_count		= 0;
 		packer_word_count			= 0;
+        axis_clk_count              = 0;
+
 		got_first_symbol_advance	= 0;
 		got_first_packer_word		= 0;
-		last_symbol_advance_time	= 0;
+		got_first_axis_clk          = 0;
+        
+        last_symbol_advance_time	= 0;
 		last_packer_word_time		= 0;
+        last_axis_clk_time          = 0;
 		
 		#200ns;
 		
@@ -403,7 +407,7 @@ module tb_full_qpsk_modulation_path;
 		axi_gpio_write(GPIO_ENABLE_BASE, 32'd0);
 		
 		// Make sure uram_play_modulation sees 0
-		repeat (1) @(posedge axis_clk);
+		repeat (2) @(posedge axis_clk);
 		
 		axi_gpio_write(GPIO_START_BASE, 32'd0);
 		axi_gpio_write(GPIO_STOP_BASE, STOP_ADDR);
@@ -414,13 +418,14 @@ module tb_full_qpsk_modulation_path;
 		axi_gpio_read(GPIO_PERIOD_BASE, rd);
 		axi_gpio_read(GPIO_ENABLE_BASE, rd);
 		
-		$display("[%0t] Writing BRAM test pattern", $time);
+		$display("[%0t] Writing BRAM QPSK test pattern", $time);
 		
 		for (int w = 0; w < TEST_WORDS; w++) begin
-			word = make_bpsk_word(w[0]);
+			word = make_qpsk_word(w[0]);
+
 			axi_write_512(BRAM_BASE + w*BYTES_PER_WORD, word);
 			
-			$display("[%0t] Wrote BRAM word %0d addr=0x%08x word[31:0]=0x%08x", $time, w, BRAM_BASE + w*BYTES_PER_WORD, word[31:0]);
+			$display("[%0t] Wrote BRAM word %0d addr=0x%08x word[31:0] (first 32 bits of word)=0x%08x", $time, w, BRAM_BASE + w*BYTES_PER_WORD, word[31:0]);
 		end
 		
 		// Start stream after BRAM programming is complete
@@ -432,25 +437,28 @@ module tb_full_qpsk_modulation_path;
 		axi_gpio_write(GPIO_ENABLE_BASE, 32'd1);
 		axi_gpio_read(GPIO_ENABLE_BASE, rd);
 		
-		#40us;
+		#5us;
 		
 		$display("--------------------------------------------------");
         $display("RESULTS");
-        $display("sample_en_count       = %0d", sample_en_count);
+        $display("axis_clk_count        = %0d", axis_clk_count);
         $display("symbol_advance_count  = %0d", symbol_advance_count);
         $display("packer_word_count     = %0d", packer_word_count);
         $display("packer_overflow       = %0b", packer_overflow);
+        $display("last_unpacker_symbol  = 0x%0h", unpacker_symbol);
+        $display("last_symbol_idx       = %0d", symbol_idx);
+        $display("last_mapped_IQ        = %0d, %0d", mapped_i, mapped_q);
         $display("--------------------------------------------------");
 
         // Expected rough counts over 20 us:
         // sample_en_count ~ 245e6 * 20e-6 = 4900
         // symbol_advance_count ~ 20
         // packer_word_count ~ 4900/16 = 306
-        if (symbol_advance_count < 15) begin
+        if (symbol_advance_count < 300) begin
             $fatal("Too few symbol_advance pulses");
         end
 
-        if (packer_word_count < 250) begin
+        if (packer_word_count < 80) begin
             $fatal("Too few packer output words");
         end
 

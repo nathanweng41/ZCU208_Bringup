@@ -258,7 +258,7 @@ module tb_full_qpsk_modulation_path;
 				$display("[%0t] axis_clk period = %0t", $time, axis_clk_period);
 			end
 
-			if ((axis_clk_period < 6.0ns) || (axis_clk_period > 6.6ns)) begin
+			if ((axis_clk_period < 6.0ns) || (axis_clk_period > 6.5ns)) begin
 				$display("ERROR: axis_clk period wrong: dt=%0t expected about 6.25ns for 160 MHz", axis_clk_period);
 				$finish(1);
 			end
@@ -278,12 +278,14 @@ module tb_full_qpsk_modulation_path;
 			end else begin
 				dt_symbol = $time - last_symbol_advance_time;
 				last_symbol_advance_time = $time;
+
+                if (symbol_advance_count <= 32) begin
+                    $display("[%0t] symbol_advance #%0d dt=%0t sps_count=%0d symbol_idx=%0d symbol=0x%0h I=%0d Q=%0d", $time, symbol_advance_count, dt_symbol, sps_count, symbol_idx, unpacker_symbol, mapped_i, mapped_q);
+                end
 				
-				$display("[%0t] symbol_advance #%0d dt=%0t symbol_idx=%0d symbol=%0h", $time, symbol_advance_count, dt_symbol, symbol_idx, unpacker_symbol);
-				
-				if ((dt_symbol < 950ns) || (dt_symbol > 1050ns)) begin
+				if ((dt_symbol < 12ns) || (dt_symbol > 13ns)) begin
 					// 1MSPS
-					$fatal("Symbol period wrong: dt=%0t expected about 1000ns", dt_symbol);
+					$fatal("Symbol period wrong: dt=%0t expected about 12.5ns", dt_symbol);
 				end
 			end
 		end
@@ -303,33 +305,44 @@ module tb_full_qpsk_modulation_path;
 				dt_packer = $time - last_packer_word_time;
 				last_packer_word_time = $time;
 				
-				$display("[%0t] packer word #%0d dt=%0t", $time, packer_word_count, dt_packer);
-				
+                if (packer_word_count <= 32) begin
+                    $display("[%0t] packer word #%0d dt=%0t", $time, packer_word_count, dt_packer);
+                end
 	
-				// 16 valid samples * 5 clocks / 4 valid samples = 20 fabric clocks
-				// One packed word every 20 fabric clocks, should be around 3.265 ns
-				// 20 / 306.25 MHz ~ 65.306ns
-				if ((dt_packer < 60ns) || (dt_packer > 70ns)) begin
-					$fatal("Packer output word period wrong: dt=%0t expected about 65 ns", dt_packer);
+				// Packer outputs one 256-bit word every 8 complex samples
+                // Complex sample rate = 160 MHz, so 8 samples = 50 ns
+				if ((dt_packer < 49.0ns) || (dt_packer > 51.0ns)) begin
+					$fatal("Packer output word period wrong: dt=%0t expected about 50 ns", dt_packer);
 				end
 			end
 			
-			// Do all lanes have valid BPSK amplitudes? 
-			for (int lane = 0; lane < 16; lane++) begin
-				automatic logic signed [15:0] samp;
-				samp = m_axis_0_tdata[lane*16 +: 16];
-				
-				if(!((samp == AMP_POS) || (samp == AMP_NEG))) begin	
-					$fatal("Invalid BPSK sample word=%0d lane=%0d value=%0d hex=%04h", packer_word_count, lane, samp, m_axis_0_tdata[lane*16 +: 16]);
-				end
+			// Do all lanes have valid QPSK amplitudes?
+            // 8 complex samples, 1 each lane 
+			for (int lane = 0; lane < 8; lane++) begin
+                automatic logic signed [15:0] lane_i;
+                automatic logic signed [15:0] lane_q;
+
+                lane_i = m_axis_0_tdata[lane*32 +: 16];
+				lane_q = m_axis_0_tdata[lane*32 + 16: 16];
+
+                if (!((lane_i == AMP_POS) || (lane_i == AMP_NEG))) begin
+                    $fatal("Invalid QPSK I sample word=%0d lane=%0d I_value=%0d hex=%04h", packer_word_count, lane, lane_i, m_axis_0_tdata[lane*32 +: 16]);
+                end
+
+                if (!((lane_q == AMP_POS) || (lane_q == AMP_NEG))) begin
+                    $fatal("Invalid QPSK Q sample word=%0d lane=%0d Q_value=%0d hex=%04h", packer_word_count, lane, lane_q, m_axis_0_tdata[lane*32 + 16: 16]);
+                end
 			end
 			
 			if (packer_word_count <= 8) begin
-				$write("	lanes:");
-				for (int lane = 0; lane < 16; lane++) begin
-					automatic logic signed [15:0] samp;
-					samp = m_axis_0_tdata[lane*16 +: 16];
-					$write(" %0d", samp);
+				$write("	IQ lanes:");
+				for (int lane = 0; lane < 8; lane++) begin
+					automatic logic signed [15:0] lane_i;
+                    automatic logic signed [15:0] lane_q;
+
+                    lane_i = m_axis_0_tdata[lane*32 +: 16];
+                    lane_q = m_axis_0_tdata[lane*32 + 16: 16];
+					$write(" (%0d,%0d)", lane_i, lane_q);
 				end
 				$write("\n");
 			end
@@ -339,9 +352,26 @@ module tb_full_qpsk_modulation_path;
 	// Overflow should never be asserted
 	always @(posedge axis_clk) begin
 		if (packer_overflow) begin
-			$fatal("[%0t] sample_packer_overflow asserted", $time);
+			$display("[%0t] ERROR: qpsk_sample_packer overflow asserted", $time);
+            $finish(1);
 		end
 	end
+    
+    // Backpressure test from AI
+        /*
+    initial begin
+        m_axis_0_tready = 1'b1;
+
+        #5us;
+        repeat (4) begin
+            @(posedge axis_clk);
+            m_axis_0_tready = 1'b0;
+            repeat (3) @(posedge axis_clk);
+            m_axis_0_tready = 1'b1;
+            repeat (20) @(posedge axis_clk);
+        end
+    end
+    */
 	
 	// Main stimulus
 	logic [511:0] word;

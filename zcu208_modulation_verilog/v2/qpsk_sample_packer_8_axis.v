@@ -29,11 +29,11 @@
 //
 //////////////////////////////////////////////////////////////////////////////////
 
-module sample_packer_16_axis #(
+module qpsk_sample_packer_16_axis #(
 		   parameter integer SAMPLE_WIDTH = 16,
            parameter integer COMPLEX_WIDTH = 32,
            parameter integer COMPLEX_SAMPLES_PER_WORD = 8,
-		   parameter integer OUT_WIDTH = COMPLEX_WIDTH * COMPLEX_SAMPLES_PER_WORD;
+		   parameter integer OUT_WIDTH = COMPLEX_WIDTH * COMPLEX_SAMPLES_PER_WORD
 )(        
 
 	 input wire axis_clk, 
@@ -63,6 +63,9 @@ module sample_packer_16_axis #(
    localparam integer COUNT_WIDTH = 3;
 
    reg [OUT_WIDTH-1:0] packed_reg;
+
+   wire in_fire;
+   wire out_fire;
 
    assign in_fire = s_axis_tvalid && s_axis_tready;
    assign out_fire = m_axis_tvalid && m_axis_tready;

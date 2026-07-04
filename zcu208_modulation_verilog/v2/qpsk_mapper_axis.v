@@ -30,7 +30,7 @@ module qpsk_mapper_axis (
 	 input wire 	  s_axis_tvalid,
 	 output wire      s_axis_tready,
 	 
-	 output wire signed [31:0] m_axis_tdata,
+	 output wire [31:0]        m_axis_tdata,
 	 output wire			   m_axis_tvalid,
 	 input wire 			   m_axis_tready
    );
@@ -83,7 +83,7 @@ module qpsk_mapper_axis (
             end
         endcase
      end
-     
+
 	 assign m_axis_tdata = {q_sample, i_sample};
 	 
 endmodule

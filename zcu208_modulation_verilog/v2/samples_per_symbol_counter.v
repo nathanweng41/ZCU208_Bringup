@@ -58,9 +58,7 @@ module samples_per_symbol_counter #() (
 				end
 			end
 		end
-	end
-end
-	
+    end
 endmodule
 			
 

@@ -247,6 +247,8 @@ module tb_full_qpsk_modulation_path;
     // Clk debug, use for first validation test, then comment out to reduce simulation output
 	
 	always @(posedge axis_clk) begin
+        axis_clk_count++;
+
 		if (!got_first_axis_clk) begin
 			got_first_axis_clk = 1'b1;
 			last_axis_clk_time = $time;
@@ -323,14 +325,14 @@ module tb_full_qpsk_modulation_path;
                 automatic logic signed [15:0] lane_q;
 
                 lane_i = m_axis_0_tdata[lane*32 +: 16];
-				lane_q = m_axis_0_tdata[lane*32 + 16: 16];
+				lane_q = m_axis_0_tdata[lane*32 + 16 +: 16];
 
                 if (!((lane_i == AMP_POS) || (lane_i == AMP_NEG))) begin
                     $fatal("Invalid QPSK I sample word=%0d lane=%0d I_value=%0d hex=%04h", packer_word_count, lane, lane_i, m_axis_0_tdata[lane*32 +: 16]);
                 end
 
                 if (!((lane_q == AMP_POS) || (lane_q == AMP_NEG))) begin
-                    $fatal("Invalid QPSK Q sample word=%0d lane=%0d Q_value=%0d hex=%04h", packer_word_count, lane, lane_q, m_axis_0_tdata[lane*32 + 16: 16]);
+                    $fatal("Invalid QPSK Q sample word=%0d lane=%0d Q_value=%0d hex=%04h", packer_word_count, lane, lane_q, m_axis_0_tdata[lane*32 + 16 +: 16]);
                 end
 			end
 			
@@ -341,7 +343,7 @@ module tb_full_qpsk_modulation_path;
                     automatic logic signed [15:0] lane_q;
 
                     lane_i = m_axis_0_tdata[lane*32 +: 16];
-                    lane_q = m_axis_0_tdata[lane*32 + 16: 16];
+                    lane_q = m_axis_0_tdata[lane*32 + 16 +: 16];
 					$write(" (%0d,%0d)", lane_i, lane_q);
 				end
 				$write("\n");
@@ -450,10 +452,11 @@ module tb_full_qpsk_modulation_path;
         $display("last_mapped_IQ        = %0d, %0d", mapped_i, mapped_q);
         $display("--------------------------------------------------");
 
-        // Expected rough counts over 20 us:
-        // sample_en_count ~ 245e6 * 20e-6 = 4900
-        // symbol_advance_count ~ 20
-        // packer_word_count ~ 4900/16 = 306
+        // Expected rough counts over 5 us:
+        // 160 MHz sample clock --> about 800 complex samples
+        // symbol_period = 2 --> about 400 symbol_advance pulses
+        // packer output = 800 / 8 ~ 100 packed words
+        
         if (symbol_advance_count < 300) begin
             $fatal("Too few symbol_advance pulses");
         end

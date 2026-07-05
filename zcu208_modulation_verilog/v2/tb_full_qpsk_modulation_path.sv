@@ -230,38 +230,48 @@ module tb_full_qpsk_modulation_path;
 	int symbol_advance_count;
 	int packer_word_count;
     int axis_clk_count;
+
+	int last_symbol_advance_cycle;
+	int symbol_advance_cycle_delta;
+	int last_packer_word_cycle;
+	int packer_cycle_delta;
 	
-	time last_symbol_advance_time;
-	time last_packer_word_time;
-	time last_axis_clk_time;
+	realtime last_symbol_advance_time;
+	realtime last_packer_word_time;
+	realtime last_axis_clk_time;
 	
-	time dt_symbol;
-	time dt_packer;
-	time axis_clk_period;
+	realtime dt_symbol;
+	realtime dt_packer;
+	realtime axis_clk_period;
 	
 	bit got_first_symbol_advance;
 	bit got_first_packer_word;
 	bit got_first_axis_clk;
+
+	bit got_first_symbol_advance_cycle;
+	bit got_first_packer_word_cycle;
 	
 
     // Clk debug, use for first validation test, then comment out to reduce simulation output
+	// Clk wizard may show 6ns/7ns style edge spacing.
 	
 	always @(posedge axis_clk) begin
         axis_clk_count++;
 
 		if (!got_first_axis_clk) begin
 			got_first_axis_clk = 1'b1;
-			last_axis_clk_time = $time;
+			last_axis_clk_time = $realtime;
 		end else begin
-			axis_clk_period = $time - last_axis_clk_time;
-			last_axis_clk_time = $time;
+			axis_clk_period = $realtime - last_axis_clk_time;
+			last_axis_clk_time = $realtime;
 			
 			if (axis_clk_count <= 10) begin
-				$display("[%0t] axis_clk period = %0t", $time, axis_clk_period);
+				$display("[%0t] axis_clk period = %.3f ns", $realtime, axis_clk_period);
 			end
 
-			if ((axis_clk_period < 6.0ns) || (axis_clk_period > 6.5ns)) begin
-				$display("ERROR: axis_clk period wrong: dt=%0t expected about 6.25ns for 160 MHz", axis_clk_period);
+			// Widen range, loose check only
+			if ((axis_clk_period < 5.5ns) || (axis_clk_period > 7.5ns)) begin
+				$display("ERROR: axis_clk period VERY wrong: dt=%0t expected about 6.25ns for 160 MHz", axis_clk_period);
 				$finish(1);
 			end
 		end
@@ -275,19 +285,26 @@ module tb_full_qpsk_modulation_path;
 		
 			if (!got_first_symbol_advance) begin
 				got_first_symbol_advance = 1'b1;
-				last_symbol_advance_time = $time;
-				$display("[%0t] first symbol advance symbol_idx=%0d symbol=0x%0h word_loaded=%0b", $time, symbol_idx, unpacker_symbol, word_loaded);
+				last_symbol_advance_time = $realtime;
+				$display("[%0t] first symbol advance symbol_idx=%0d symbol=0x%0h word_loaded=%0b", $realtime, symbol_idx, unpacker_symbol, word_loaded);
 			end else begin
-				dt_symbol = $time - last_symbol_advance_time;
-				last_symbol_advance_time = $time;
+				dt_symbol = $realtime - last_symbol_advance_time;
+				last_symbol_advance_time = $realtime;
 
                 if (symbol_advance_count <= 32) begin
-                    $display("[%0t] symbol_advance #%0d dt=%0t sps_count=%0d symbol_idx=%0d symbol=0x%0h I=%0d Q=%0d", $time, symbol_advance_count, dt_symbol, sps_count, symbol_idx, unpacker_symbol, mapped_i, mapped_q);
+                    $display("[%0t] symbol_advance #%0d dt=%0t sps_count=%0d symbol_idx=%0d symbol=0x%0h I=%0d Q=%0d", $realtime, symbol_advance_count, dt_symbol, sps_count, symbol_idx, unpacker_symbol, mapped_i, mapped_q);
                 end
 				
-				if ((dt_symbol < 12ns) || (dt_symbol > 13ns)) begin
-					// 1MSPS
-					$fatal("Symbol period wrong: dt=%0t expected about 12.5ns", dt_symbol);
+				if (!got_first_symbol_advance_cycle) begin
+					got_first_symbol_advance_cycle = 1'b1;
+					last_symbol_advance_cycle = axis_clk_count;
+				end else begin
+					symbol_advance_cycle_delta = axis_clk_count - last_symbol_advance_cycle;
+					last_symbol_advance_cycle = axis_clk_count;
+
+					if (symbol_advance_cycle_delta != SYMBOL_PERIOD) begin
+						$fatal("Symbol advance spacing wrong: got %0d cycles, expected %0d", symbol_advance_cycle_delta, SYMBOL_PERIOD);
+					end
 				end
 			end
 		end
@@ -300,21 +317,28 @@ module tb_full_qpsk_modulation_path;
 			
 			if (!got_first_packer_word) begin
 				got_first_packer_word = 1'b1;
-				last_packer_word_time = $time;
+				last_packer_word_time = $realtime;
 				
-				$display("[%0t] first packer word", $time);
+				$display("[%0t] first packer word", $realtime);
 			end else begin
-				dt_packer = $time - last_packer_word_time;
-				last_packer_word_time = $time;
+				dt_packer = $realtime - last_packer_word_time;
+				last_packer_word_time = $realtime;
 				
                 if (packer_word_count <= 32) begin
-                    $display("[%0t] packer word #%0d dt=%0t", $time, packer_word_count, dt_packer);
+                    $display("[%0t] packer word #%0d dt=%0t", $realtime, packer_word_count, dt_packer);
                 end
 	
 				// Packer outputs one 256-bit word every 8 complex samples
-                // Complex sample rate = 160 MHz, so 8 samples = 50 ns
-				if ((dt_packer < 49.0ns) || (dt_packer > 51.0ns)) begin
-					$fatal("Packer output word period wrong: dt=%0t expected about 50 ns", dt_packer);
+				if (!got_first_packer_word_cycle) begin
+					got_first_packer_word_cycle = 1'b1;
+					last_packer_word_cycle = axis_clk_count;
+				end else begin
+					packer_cycle_delta = axis_clk_count - last_packer_word_cycle;
+					last_packer_word_cycle = axis_clk_count;
+
+					if (packer_cycle_delta != 8) begin
+						$fatal("Packer output spacing wrong: got %0d cycles, expected 8", packer_cycle_delta);
+					end
 				end
 			end
 			
@@ -354,7 +378,7 @@ module tb_full_qpsk_modulation_path;
 	// Overflow should never be asserted
 	always @(posedge axis_clk) begin
 		if (packer_overflow) begin
-			$display("[%0t] ERROR: qpsk_sample_packer overflow asserted", $time);
+			$display("[%0t] ERROR: qpsk_sample_packer overflow asserted", $realtime);
             $finish(1);
 		end
 	end
@@ -381,19 +405,25 @@ module tb_full_qpsk_modulation_path;
 	logic [31:0] rd;
 	
 	initial begin
-		$display("[%0t] TB full QPSK modulation path START", $time);
+		$display("[%0t] TB full QPSK modulation path START", $realtime);
 		
 		symbol_advance_count		= 0;
 		packer_word_count			= 0;
         axis_clk_count              = 0;
+		symbol_advance_cycle_delta	= 0;
+		packer_cycle_delta			= 0;
 
-		got_first_symbol_advance	= 0;
-		got_first_packer_word		= 0;
-		got_first_axis_clk          = 0;
+		got_first_symbol_advance		= 0;
+		got_first_packer_word			= 0;
+		got_first_axis_clk          	= 0;
+		got_first_symbol_advance_cycle	= 0;
+		got_first_packer_word_cycle		= 0;
         
         last_symbol_advance_time	= 0;
 		last_packer_word_time		= 0;
         last_axis_clk_time          = 0;
+		last_symbol_advance_cycle	= 0;
+		last_packer_word_cycle		= 0;
 		
 		#200ns;
 		
@@ -420,19 +450,19 @@ module tb_full_qpsk_modulation_path;
 		axi_gpio_read(GPIO_PERIOD_BASE, rd);
 		axi_gpio_read(GPIO_ENABLE_BASE, rd);
 		
-		$display("[%0t] Writing BRAM QPSK test pattern", $time);
+		$display("[%0t] Writing BRAM QPSK test pattern", $realtime);
 		
 		for (int w = 0; w < TEST_WORDS; w++) begin
 			word = make_qpsk_word(w[0]);
 
 			axi_write_512(BRAM_BASE + w*BYTES_PER_WORD, word);
 			
-			$display("[%0t] Wrote BRAM word %0d addr=0x%08x word[31:0] (first 32 bits of word)=0x%08x", $time, w, BRAM_BASE + w*BYTES_PER_WORD, word[31:0]);
+			$display("[%0t] Wrote BRAM word %0d addr=0x%08x word[31:0] (first 32 bits of word)=0x%08x", $realtime, w, BRAM_BASE + w*BYTES_PER_WORD, word[31:0]);
 		end
 		
 		// Start stream after BRAM programming is complete
 		
-		$display("[%0t] Enabling stream", $time);
+		$display("[%0t] Enabling stream", $realtime);
 		
 		#1ns;
 		

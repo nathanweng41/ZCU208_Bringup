@@ -301,7 +301,7 @@ module tb_full_qpsk_modulation_path;
 				last_symbol_advance_time = $realtime;
 
                 if (symbol_advance_count <= 32) begin
-                    $display("[%.3f ns] symbol_advance #%0d dt=%0t sps_count=%0d symbol_idx=%0d symbol=0x%0h I=%0d Q=%0d", $realtime, symbol_advance_count, dt_symbol, sps_count, symbol_idx, unpacker_symbol, mapped_i, mapped_q);
+                    $display("[%.3f ns] symbol_advance #%0d dt=%.3f ns sps_count=%0d symbol_idx=%0d symbol=0x%0h I=%0d Q=%0d", $realtime, symbol_advance_count, dt_symbol, sps_count, symbol_idx, unpacker_symbol, mapped_i, mapped_q);
                 end
 				
 				if (!got_first_symbol_advance_cycle) begin
@@ -334,7 +334,7 @@ module tb_full_qpsk_modulation_path;
 				last_packer_word_time = $realtime;
 				
                 if (packer_word_count <= 32) begin
-                    $display("[%.3f ns] packer word #%0d dt=%0t", $realtime, packer_word_count, dt_packer);
+                    $display("[%.3f ns] packer word #%0d dt=%.3f ns", $realtime, packer_word_count, dt_packer);
                 end
 	
 				// Packer outputs one 256-bit word every 8 complex samples
@@ -387,7 +387,7 @@ module tb_full_qpsk_modulation_path;
 	// Overflow should never be asserted
 	always @(posedge axis_clk) begin
 		if (packer_overflow && clk_wiz_locked) begin
-			$display("[%0t] ERROR: qpsk_sample_packer overflow asserted", $realtime);
+			$display("[%.3f ns] ERROR: qpsk_sample_packer overflow asserted", $realtime);
             $finish(1);
 		end
 	end
@@ -418,19 +418,19 @@ module tb_full_qpsk_modulation_path;
 		
 		symbol_advance_count		= 0;
 		packer_word_count			= 0;
-        axis_clk_count              <= 0;
+        axis_clk_count              = 0;
 		symbol_advance_cycle_delta	= 0;
 		packer_cycle_delta			= 0;
 
 		got_first_symbol_advance		= 0;
 		got_first_packer_word			= 0;
-		got_first_axis_clk          	<= 0;
+		got_first_axis_clk          	= 0;
 		got_first_symbol_advance_cycle	= 0;
 		got_first_packer_word_cycle		= 0;
         
         last_symbol_advance_time	= 0;
 		last_packer_word_time		= 0;
-        last_axis_clk_time          <= 0.0;
+        last_axis_clk_time          = 0.0;
 		last_symbol_advance_cycle	= 0;
 		last_packer_word_cycle		= 0;
 		
@@ -445,19 +445,19 @@ module tb_full_qpsk_modulation_path;
 
 		symbol_advance_count		= 0;
 		packer_word_count			= 0;
-        axis_clk_count              <= 0;
+        axis_clk_count              = 0;
 		symbol_advance_cycle_delta	= 0;
 		packer_cycle_delta			= 0;
 
 		got_first_symbol_advance        = 1'b0;
 		got_first_packer_word           = 1'b0;
-		got_first_axis_clk              <= 1'b0;
+		got_first_axis_clk              = 1'b0;
 		got_first_symbol_advance_cycle  = 1'b0;
 		got_first_packer_word_cycle     = 1'b0;
 
         last_symbol_advance_time	= 0;
 		last_packer_word_time		= 0;
-        last_axis_clk_time          <= 0;
+        last_axis_clk_time          = 0.0;
 		last_symbol_advance_cycle	= 0;
 		last_packer_word_cycle		= 0;
 

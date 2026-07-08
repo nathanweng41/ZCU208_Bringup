@@ -11,13 +11,15 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module samples_per_symbol_counter #() (        
+module samples_per_symbol_counter (        
 
 	 input wire clk, 
 	 
 	 input wire rstn,
 	 
 	 input wire enable,
+
+	 input wire unpacker_tvalid,
 	 
 	 // Number of valid samples per symbol
 	 input wire [15:0] symbol_period,
@@ -34,6 +36,9 @@ module samples_per_symbol_counter #() (
 		$display("XXXXXX SAMPLES_PER_SYMBOL_COUNTER loaded");
 	 end
 	 
+	 wire start_timer;
+	 assign start_timer = unpacker_tvalid && enable;
+
 	 always @(posedge clk) begin
 		if (!rstn) begin	
 			count          <= 16'd0;
@@ -42,7 +47,7 @@ module samples_per_symbol_counter #() (
 			// Clear symbol_advance at the start of every clk
 			symbol_advance <= 1'b0;
 			
-			if (!enable) begin
+			if (!start_timer) begin
 				count          <= 16'd0;
 				symbol_advance <= 1'b0;
             end else begin

@@ -11,8 +11,8 @@ module axis_packer_128_to_256 #(
     input wire                          s_axis_tvalid,
     output wire                         s_axis_tready,
 
-    output wire [M_DATA_WIDTH-1:0]      m_axis_tdata,
-    output wire                         m_axis_tvalid,
+    output reg [M_DATA_WIDTH-1:0]       m_axis_tdata,
+    output reg                          m_axis_tvalid,
     input wire                          m_axis_tready
 );
 

@@ -82,19 +82,19 @@ module uram_capture_128k #(
     
     parameter MEM_SIZE_BYTES = 131072
 ) (        
-    (* X_INTERFACE_PARAMETER = "MASTER_TYPE BRAM_CTRL, READ_WRITE_MODE READ, MEM_SIZE 131072, MEM_WIDTH 16" *)
+    (* X_INTERFACE_PARAMETER = "MASTER_TYPE BRAM_CTRL, READ_WRITE_MODE READ, MEM_SIZE 131072, MEM_WIDTH 32" *)
 
     (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 BRAM_PORTA DIN" *)
-    output wire [DWIDTH-1:0] bram_wdata, // Data In Bus (optional), 512 bits of data write
+    output wire [31:0] bram_wdata, // Data In Bus (optional), 32 bits of data write
 
     (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 BRAM_PORTA WE" *)
-    output wire [DWIDTH/8-1:0] bram_we, // Byte Enables (optional), 64 bytes
+    output wire [3:0] bram_we, // Byte Enables (optional), 4 bytes
   
     (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 BRAM_PORTA EN" *)
     output wire bram_en, // Chip Enable Signal (optional)
   
     (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 BRAM_PORTA DOUT" *)
-    input wire [DWIDTH-1:0] bram_rdata, // Data Out Bus (optional)
+    input wire [31:0] bram_rdata, // Data Out Bus (optional)
   
     (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 BRAM_PORTA ADDR" *)
     output wire [31:0] bram_addr, // Address Signal (required)
@@ -116,29 +116,42 @@ module uram_capture_128k #(
     output wire               CAP_AXIS_tready,
     input  wire               CAP_AXIS_tvalid,
 
-    output reg  [DWIDTH-1:0] PASSTHROUGH_AXIS_tdata,
+    output reg  [DWIDTH-1:0]  PASSTHROUGH_AXIS_tdata,
     input  wire               PASSTHROUGH_AXIS_tready,
-    output reg               PASSTHROUGH_AXIS_tvalid,
+    output reg                PASSTHROUGH_AXIS_tvalid,
 
     input  wire               trig_cap,
     
     output wire [1:0]         trig_cap_p_2to1_mon
 );
    
-         
-    localparam ADDR_INC = DWIDTH/8; // 64 bytes address increment
+    // BRAM interface is now 32 bits --> 4 bytes per word
+    localparam BRAM_ADDR_INC = 4; // 4 bytes address increment
     localparam CAP_SIZE = MEM_SIZE_BYTES;
     
     (* ASYNC_REG="TRUE" *) reg [2:0] trig_cap_p;
-    
-    reg [DWIDTH-1:0]                 cap_data_p;
+
+    wire                             trig_cap_rise;
+
+    assign                           trig_cap_rise = (trig_cap_p[2:1] == 2'b01);
+
+    assign                           trig_cap_p_2to1_mon = trig_cap_p[2:1]; // Debug signal for ILA
+
+    // Sample packing
+    // first_sample holds the earlier of the two consecutive valid ADC samples.
+    // bram_wdata[15:0] = earlier sample
+    // bram_wdata[31:16] = later sample
+
+    reg [15:0]                       first_sample;
+    reg                              half_full;
+
+    // BRAM output pipeline
+    reg [31:0]                       cap_data_p;
     reg                              cap_valid_p;
     reg [31:0]                       cap_addr_p;
 
     reg [31:0]                       next_addr;
     reg                              capture_active;
-
-    wire                             trig_cap_rise;
 
     
     assign bram_clk = axis_clk;
@@ -148,14 +161,13 @@ module uram_capture_128k #(
     assign bram_wdata = cap_data_p;
     assign bram_addr  = cap_addr_p;
 
-    assign bram_we = cap_valid_p ? {DWIDTH/8{1'b1}} : {DWIDTH/8{1'b0}}; // Write enable for all bytes when valid
+    // we is for per word (8b)
+    assign bram_we = cap_valid_p ? 4'b1111 : 4'b0000; // Write enable for all bytes when valid
     
-    assign trig_cap_rise = (trig_cap_p[2:1] == 2'b01);
-    assign trig_cap_p_2to1_mon = trig_cap_p[2:1]; // Debug signal for ILA
+    // Capture block never backpressures ADC stream
     assign CAP_AXIS_tready = 1'b1;
-    
 
-    // pipline registers for in data to bram and passthrough outputs
+    // Passthrough for ILA debug
     always @(posedge axis_clk)
     begin
         PASSTHROUGH_AXIS_tdata  <= CAP_AXIS_tdata;
@@ -166,33 +178,47 @@ module uram_capture_128k #(
     always @(posedge axis_clk)
 	begin
 		if (!axis_aresetn) begin
-            cap_data_p      <= {DWIDTH{1'b0}};
+            cap_data_p      <= 32'd0;
             cap_valid_p     <= 1'b0;
             cap_addr_p      <= 32'd0;
 
             next_addr       <= 32'd0;
             capture_active  <= 1'b0;
 		    trig_cap_p      <= 3'b000;
+
+            first_sample    <= 16'd0;
+            half_full       <= 1'b0;
 		end else begin
 
+            // Synchronize asynchronous capture trigger
             trig_cap_p[2:0] <= {trig_cap_p[1:0], trig_cap};
             // Default: no BRAM write generated for next cycle
-            cap_valid_p <= 1'b0;
+            cap_valid_p     <= 1'b0;
 
+            // Do not capture CAP_AXIS_tdata on the trigger-detection cycle. Only after the trigger has been detected, capture the next 2 samples. This is to avoid capturing a partial sample on the trigger cycle.
             if(trig_cap_rise) begin
-                next_addr <= 32'd0;
+                next_addr      <= 32'd0;
                 capture_active <= 1'b1;
+                half_full      <= 1'b0;
             end
 
             else if (capture_active && CAP_AXIS_tvalid) begin
-                cap_data_p <= CAP_AXIS_tdata;
-                cap_valid_p <= 1'b1;
-                cap_addr_p <= next_addr;
-
-                if(next_addr < CAP_SIZE-ADDR_INC) begin
-                    next_addr <= next_addr + ADDR_INC;
+                if (!half_full) begin
+                    first_sample <= CAP_AXIS_tdata;
+                    half_full    <= 1'b1;
                 end else begin
-                    capture_active <= 1'b0;
+                    cap_data_p   <= {CAP_AXIS_tdata, first_sample};
+                    cap_valid_p  <= 1'b1;
+                    cap_addr_p   <= next_addr;
+
+                    half_full    <= 1'b0; // Reset half_full for next pair of samples
+
+                    if(next_addr < CAP_SIZE-BRAM_ADDR_INC) begin
+                        next_addr <= next_addr + BRAM_ADDR_INC;
+                    end else begin
+                        // Last 32-bit word has been formed
+                        capture_active <= 1'b0;
+                    end
                 end
             end
 		end

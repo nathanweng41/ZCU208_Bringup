@@ -5,7 +5,12 @@
 
  */
 module axis_fir_bypass_mux (
+    (* X_INTERFACE_INFO = "xilinx.com:signal:clock:1.0 axis_aclk CLK" *)
+    (* X_INTERFACE_PARAMETER =  "ASSOCIATED_BUSIF s_axis:fir_s_axis:fir_m_axis:m_axis, ASSOCIATED_RESET axis_aresetn, FREQ_HZ 20000000" *)
     input wire         axis_aclk,
+
+    (* X_INTERFACE_INFO = "xilinx.com:signal:reset:1.0 axis_aresetn RST" *)
+    (* X_INTERFACE_PARAMETER = "POLARITY ACTIVE_LOW" *)
     input wire         axis_aresetn,
 
     /*
@@ -15,24 +20,44 @@ module axis_fir_bypass_mux (
     input wire         bypass_fir,
 
     // Input from FIFO
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 s_axis TDATA" *)
     input wire [127:0] s_axis_tdata,
+
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 s_axis TVALID" *)
     input wire         s_axis_tvalid,
+
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 s_axis TREADY" *)
     output wire        s_axis_tready,
 
     // Output TO FIR Compiler
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 fir_s_axis TDATA" *)
     output wire [127:0] fir_s_axis_tdata,
+
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 fir_s_axis TVALID" *)
     output wire         fir_s_axis_tvalid,
+
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 fir_s_axis TREADY" *)
     input wire          fir_s_axis_tready,
 
     // Input FROM FIR Compiler
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 fir_m_axis TDATA" *)
     input wire [127:0]  fir_m_axis_tdata,
+
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 fir_m_axis TVALID" *)
     input wire          fir_m_axis_tvalid,
+
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 fir_m_axis TREADY" *)
     output wire         fir_m_axis_tready,
 
     // Output to 128 -> 256 bit packer
 
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 m_axis TDATA" *)
     output wire [127:0]  m_axis_tdata,
+    
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 m_axis TVALID" *)
     output wire          m_axis_tvalid,
+    
+    (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 m_axis TREADY" *)
     input wire           m_axis_tready
 );
 

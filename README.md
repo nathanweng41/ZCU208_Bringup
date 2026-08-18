@@ -5,6 +5,10 @@ MATLAB, Verilog, SystemVerilog scripts and testbenches for bringing up the AMD/X
 Each version below corresponds to a specific XSA hardware design. 
 
 --- 
+## [SISO Modulation 2.2 ILA]
+
+### Features
+- Added 2 ILAs for debug: one at the output of the RFSoC and one after the downsampler
 
 ## [SISO Modulation 2.2] 
 **Date**: 2026-08-17

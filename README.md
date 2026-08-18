@@ -1,27 +1,129 @@
-# ZCU208_Bringup
-MATLAB, Verilog, SystemVerilog scripts and testbenches to bringup RF SoC ZCU208 as a lab tool. Versions described below correspond to XSA files. 
+# ZCU208 Bring-Up
 
-## [2.2] (2026-08-17)
+MATLAB, Verilog, SystemVerilog scripts and testbenches for bringing up the AMD/Xilinx ZCU208 RFSoC as a lab test platform.
 
-### Features
-* **ADC**: Add ADC features on ADC Tile 225. Now able to calibrate with programmable delay and stream data out of BRAM
+Each version below corresponds to a specific XSA hardware design. 
 
-* Example flow:
-* 1. Download data (`dow -force -data ./dac_ramp_10MHz_128k.bin 0xa00a0000`)
-* 2. Set stop ptr (`mwr 0xa01b0000 0x0001fdc0`)
-* 3. Set start ptr (`mwr 0xa0130000 0`)
-* 4. Enable stream (`uramPlay`)
-* 5. 
+--- 
 
-* **FIR**: Optional FIR enable through Vitis before downsampler on RX
-
-* **DAC**: DAC Tile 231 has 2 channels for waveform streaming
-
-### Bugs
-* **NCO**: NCO on DAC is not working
-
-## [2.1] 
+## [SISO Modulation 2.2] 
+**Date**: 2026-08-17
 
 ### Features
-* **NCO**: DAC has NCO working, validated up to 950 MHz
-* **DAC**: DAC is able to send QPSK symbols successfully with baseband rate of 160 MHz
+
+
+#### ADC
+- Added ADC support on **ADC Tile 225**
+- Supports programmable phase/delay selection
+- Supports ADC capture and BRAM read
+- Added explicit downsampling and phase-selectable capture path
+
+#### FIR
+- Optional RX FIR filter before the downsampler
+- FIR can be enabled or bypassed through Vitis
+
+#### DAC
+- **DAC Tile 231** supports 2-channel waveform streaming 
+- Supports BRAM waveform playback
+
+### Example DAC -> ADC Flow
+
+1. Download the DAC waveform into BRAM:
+
+   ```tcl
+   dow -force -data ./dac_ramp_10MHz_128k.bin 0xa00a0000
+   ```
+
+2. Set the DAC stop pointer:
+
+   ```tcl
+   mwr 0xa01b0000 0x0001FDC0
+   ```
+
+3. Set the DAC start pointer:
+
+   ```tcl
+   mwr 0xa0130000 0x00000000
+   ```
+
+4. Start waveform playback:
+
+   ```tcl
+   uramPlay
+   ```
+
+5. Enable downsampler:
+
+   ```tcl
+   mwr 0xa01f0000 1
+   ```
+
+6. Set desired ADC capture phase:
+
+    ```tcl
+    mwr 0xa0210000 2
+    ```
+
+7. Trigger capture:
+`
+    ```tcl
+    uramCap
+    ```
+
+8. Read the ADC capture back from BRAM:
+    ```tcl
+    mrd -force -size h -bin -file ./cap0.bin 0xa00c0000 65536
+    ```
+
+### Known Issues
+
+- **NCO:** DAC NCO is currently not working in this version.
+
+---
+
+## SISO Modulation 2.1
+
+### Features
+
+#### NCO
+- DAC NCO operational
+- Validated up to **950 MHz**
+
+#### DAC
+- QPSK symbol transmission supported on DAC Tile 230
+- Complex baseband processing at **160 MSPS**
+
+--- 
+
+## 4x4 MIMO
+**XSA:** `zcu208_adc_v03`
+
+### Features
+
+#### DAC / ADC
+- 4-TX / 4-RX architecture for MIMO testing
+- Multi-Tile Synchronization (MTS) support
+- See the Vivado address map / register map for programming details
+
+#### MATLAB
+- Some MATLAB automation support available
+- See:
+
+  ```text
+  matlab_automation/
+  ```
+
+---
+
+## Repository Contents
+
+Typical contents include:
+
+- MATLAB waveform-generation and analysis scripts
+- Verilog/SystemVerilog RTL
+- SystemVerilog testbenches
+- RFDC bring-up and configuration code
+- DAC waveform playback
+- ADC capture and phase-selection logic
+- FIR filter design and verification
+- Modulation and MIMO test utilities

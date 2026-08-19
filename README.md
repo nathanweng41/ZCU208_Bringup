@@ -29,6 +29,7 @@ Each version below corresponds to a specific XSA hardware design.
 #### DAC
 - **DAC Tile 231** supports 2-channel waveform streaming 
 - Supports BRAM waveform playback
+- DAC NCO has separate uramPlay, will need to combine GPIOs in the next revision
 
 ### Example DAC -> ADC Flow
 
@@ -80,8 +81,7 @@ Each version below corresponds to a specific XSA hardware design.
     ```
 
 ### Known Issues
-
-- **NCO:** DAC NCO is currently not working in this version.
+- **CLK:** 640 MHz is brought out on the LMK board, but high harmonics (-21 dBm at 1.28 GHz) were observed
 
 ---
 

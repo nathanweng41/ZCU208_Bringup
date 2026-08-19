@@ -10,6 +10,10 @@ Each version below corresponds to a specific XSA hardware design.
 ### Features
 - Added 2 ILAs for debug: one at the output of the RFSoC and one after the downsampler
 
+### Known Issues
+- **CLK:** 640 MHz is brought out on the LMK board, but high harmonics (-21 dBm at 1.28 GHz) were observed
+- **Sample Per Symbol Counter:** Steady state is fine, but it may initially be one clock short
+
 ## [SISO Modulation 2.2] 
 **Date**: 2026-08-17
 
@@ -82,6 +86,7 @@ Each version below corresponds to a specific XSA hardware design.
 
 ### Known Issues
 - **CLK:** 640 MHz is brought out on the LMK board, but high harmonics (-21 dBm at 1.28 GHz) were observed
+- **Sample Per Symbol Counter:** Steady state is fine, but it may initially be one clock short
 
 ---
 

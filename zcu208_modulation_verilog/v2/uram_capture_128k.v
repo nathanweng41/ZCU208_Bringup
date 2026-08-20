@@ -82,7 +82,7 @@ module uram_capture_128k #(
     
     parameter MEM_SIZE_BYTES = 131072
 ) (        
-    (* X_INTERFACE_PARAMETER = "MASTER_TYPE BRAM_CTRL, READ_WRITE_MODE READ, MEM_SIZE 131072, MEM_WIDTH 32" *)
+    (* X_INTERFACE_PARAMETER = "MASTER_TYPE BRAM_CTRL, READ_WRITE_MODE READ_WRITE, MEM_SIZE 131072, MEM_WIDTH 32" *)
 
     (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 BRAM_PORTA DIN" *)
     output wire [31:0] bram_wdata, // Data In Bus (optional), 32 bits of data write

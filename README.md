@@ -4,7 +4,31 @@ MATLAB, Verilog, SystemVerilog scripts and testbenches for bringing up the AMD/X
 
 Each version below corresponds to a specific XSA hardware design. 
 
+## [SISO Modulation 2.4]
+
+### Features
+- **ADC:** Added ADC NCO as well as a simple capture at 160 MSPS (1 complex sample per clk) to validate SISO Modulation 2.3
+- **MTS:** Validated MTS works on Tiles 225 and 230
+- **Vitis:** Added Vitis code support to sync DAC/ADC NCO to SYSREF clk, yet to be verified
+
+### Known Issues
+- **CLK:** 640 MHz is brought out on the LMK board, but high harmonics (-21 dBm at 1.28 GHz) were observed
+
+---
+
+## [SISO Modulation 2.3]
+
+### Features
+- **Modulation Scheme:** Implemented QPSK + 16-QAM modulation support
+
+### Bug Fixes
+- **Sample Per Symbol Counter:** Counter is fixed from previous version. Design has been verified to output the correct samples per symbol
+
+### Known Issues
+- **CLK:** 640 MHz is brought out on the LMK board, but high harmonics (-21 dBm at 1.28 GHz) were observed
+
 --- 
+
 ## [SISO Modulation 2.2 ILA]
 
 ### Features
@@ -18,7 +42,6 @@ Each version below corresponds to a specific XSA hardware design.
 **Date**: 2026-08-17
 
 ### Features
-
 
 #### ADC
 - Added ADC support on **ADC Tile 225**

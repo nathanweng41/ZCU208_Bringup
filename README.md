@@ -19,7 +19,7 @@ Each version below corresponds to a specific XSA hardware design.
 ## [SISO Modulation 2.3]
 
 ### Features
-- **Modulation Scheme:** Implemented QPSK + 16-QAM modulation support
+- **Modulation Scheme:** Implemented QPSK + 16-QAM modulation support and an option to change the output gain (less than or equal to 1) through Vitis. Note: if you need higher gain, change DAC VOP.
 
 ### Bug Fixes
 - **Sample Per Symbol Counter:** Counter is fixed from previous version. Design has been verified to output the correct samples per symbol

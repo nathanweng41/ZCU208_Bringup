@@ -23,7 +23,7 @@
 
 module qam_mapper_axis ( 
      (* X_INTERFACE_INFO = "xilinx.com:signal:clock:1.0 axis_aclk CLK" *)
-     (* X_INTERFACE_PARAMETER = "ASSOCIATED_BUSIF s_axis:m_axis, FREQ_HZ 160000000" *)
+     (* X_INTERFACE_PARAMETER = "ASSOCIATED_BUSIF s_axis:m_axis, FREQ_HZ 20000000" *)
      input wire axis_aclk,
      
 	 input wire [7:0] s_axis_tdata,

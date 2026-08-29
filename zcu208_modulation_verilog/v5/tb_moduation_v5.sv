@@ -13,7 +13,7 @@ module tb_modulation_v5;
     logic axis_aclk = 1'b0;
     logic axis_aresetn_0 = 1'b0;
     logic enable_0 = 1'b0;
-    logic [15:0] gain_q15_0 = 16'h4000;
+    logic [15:0] gain_q15_0 = 16'h8000;
     logic mod_mode_0 = 1'b1;
 
     logic [511:0] s_axis_0_tdata = '0;

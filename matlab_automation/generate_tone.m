@@ -16,7 +16,7 @@ function [start_ptr, stop_ptr, fn, fp] = generate_tone(fc, dphi_deg, amplitude_d
 
 filedir = char(filedir);
 
-fs_dac = 9.8e9;
+fs_dac = 6.4e9;
 fs = fs_dac/ interpolation_rate;
 
 mem_bytes = 131072; % 128kB

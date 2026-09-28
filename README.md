@@ -4,6 +4,17 @@ MATLAB, Verilog, SystemVerilog scripts and testbenches for bringing up the AMD/X
 
 Each version below corresponds to a specific XSA hardware design. 
 
+## [SISO Modulation 2.5]
+
+### Features
+- **TX Flow:** Updated transmit chain to include RX and TX RRCs: 2.5MSPS → Interp-8 + RRC → Interp-8 + IMR → multiply by 4 for RFDC (See slides for full block diagram.)
+- **ADC:** Added RX-side RRC to convert 10 MSPS to 2.5 MSPS (SPS = 4)
+
+### Known Issues
+- **CLK:** 640 MHz is brought out on the LMK board, but high harmonics (-21 dBm at 1.28 GHz) were observed
+- **UramStop Behavior:** RFDC outputs the last stored word when playback stops, which introduces harmonics. The fix is to write zeros at the end of the buffer; this will be addressed in a future update.
+---
+
 ## [SISO Modulation 2.4]
 
 ### Features

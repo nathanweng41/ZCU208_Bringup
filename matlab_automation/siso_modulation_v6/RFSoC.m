@@ -138,8 +138,7 @@ classdef RFSoC < handle
             obj.X.downloadData(filename, d.bram);
         end
 
-        % ptr input format is integer, you can also put the exact string
-        % "0x..."
+        % ptr input format is integer (numeric byte offsets only)
         function setPointers(obj, tile, channel, startPtr, stopPtr)
 
             obj.requireConnected();
@@ -307,7 +306,7 @@ classdef RFSoC < handle
 
             gainQ15 = uint32(gainQ15);
 
-            if gainQ15 > 32678
+            if gainQ15 > 32768
                 error("%s 's gain is not supposed to go above 1.", d.name);
             end
 
@@ -373,7 +372,7 @@ classdef RFSoC < handle
 
         end
 
-        function cap = modCapture(obj, phaseQ, phaseI, outDir, playbackTile, playbackChannel)
+        function cap = modCapture(obj, phaseQ, phaseI, outDir)
 
             % Complete ADC I/Q capture sequence.
             %
@@ -392,15 +391,6 @@ classdef RFSoC < handle
         
             if nargin < 4 || isempty(outDir)
                 outDir = obj.DefaultOutDir;
-            end
-        
-            % Default playback source = DAC tile 2 channel 0
-            if nargin < 5 || isempty(playbackTile)
-                playbackTile = 2;
-            end
-        
-            if nargin < 6 || isempty(playbackChannel)
-                playbackChannel = 0;
             end
         
             outDir = string(outDir);
@@ -429,10 +419,28 @@ classdef RFSoC < handle
             % 4. Save captured memories to bin file
             % ---------------------------------------------------------
         
+            adcQ = obj.getADC(0);
+            adcI = obj.getADC(2);
         
             obj.X.readCapture(outDir, "Q_data.bin", adcQ.bram, adcQ.captureBytes);
         
             obj.X.readCapture(outDir, "I_data.bin", adcI.bram, adcI.captureBytes);
+
+            % Directly read files into matlab
+
+            qFile = fullfile(outDir, "Q_data.bin");
+            iFile = fullfile(outDir, "I_data.bin");
+
+            Q = readInt16(qFile);
+            I = readInt16(iFile);
+
+            cap = struct();
+            cap.I = I;
+            cap.Q = Q;
+            cap.phaseI = phaseI;
+            cap.phaseQ = phaseQ;
+            cap.IFile = iFile;
+            cap.QFile = qFile;
         end
 
         %% =========================================================
@@ -611,5 +619,17 @@ classdef RFSoC < handle
             a = obj.Addr.adc.(chField);
         end
 
+        function x = readInt16(~, filename)
+        
+            fid = fopen(filename, "r", "ieee-le");
+        
+            if fid < 0
+                error("Could not open %s.", filename);
+            end
+        
+            cleanup = onCleanup(@() fclose(fid));
+        
+            x = fread(fid, inf, "int16=>int16");
+        end
     end
 end

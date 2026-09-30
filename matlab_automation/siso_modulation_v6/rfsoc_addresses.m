@@ -40,7 +40,7 @@ function A = rfsoc_addresses()
     A.dac.t1.c0.uramEn     = hexaddr("A0280000");
 
     A.dac.t1.c0.bufferBytes = uint32(131072);
-    A.dac.t1.c0.bufferBytes = uint32(64);
+    A.dac.t1.c0.wordBytes = uint32(64);
 
     A.dac.t1.c2.name       = "DAC12";
     A.dac.t1.c2.kind       = "raw-tone";
@@ -117,6 +117,7 @@ function A = rfsoc_addresses()
     A.adc.c0.phaseValid     = hexaddr("A01F0000");
     A.adc.c0.phaseIncrement = hexaddr("A0200000");
     A.adc.c0.phase          = hexaddr("A0210000");
+    A.adc.c0.captureBytes   = uint32(131072);
 
     A.adc.c2.name           = "ADC12";
     A.adc.c2.bram           = hexaddr("A0020000");
@@ -124,7 +125,8 @@ function A = rfsoc_addresses()
     A.adc.c2.phaseIncrement = hexaddr("A0220000");
     A.adc.c2.phase          = hexaddr("A0230000");
     A.adc.c2.phaseValid     = hexaddr("A0240000");
-
+    A.adc.c2.captureBytes   = uint32(131072);
+    
     A.adc.trigCap = hexaddr("A0090000");
     end
 

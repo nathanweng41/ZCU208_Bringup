@@ -9,12 +9,16 @@ Each version below corresponds to a specific XSA hardware design.
 ### Features
 - **DAC:** Added 4 extra continuous waveform DACs running at 6.4 GSPS
 - **BRAM Size:** Change modulation DACs' BRAMs to 32kB 
+- **UramPlay/UramStop Behavior:** UramPlay/UramStop behaviors are not synchronized to PL clk anymore. 
 
 ### Bug Fixes
 - **UramStop Behavior:** Write zeros to RFDC which stops playing Uram
 
 ### Known Issues
 - **CLK:** 640 MHz is brought out on the LMK board, but high harmonics (-21 dBm at 1.28 GHz) were observed
+
+### Known Limitations
+- **MTS:** MTS currently not supported due to 2 different DAC configurations
 
 ---
 

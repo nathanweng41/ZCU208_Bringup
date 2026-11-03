@@ -47,6 +47,9 @@
 //#define URAM_PLAY_BASE XPAR_AXI_BRAM_CTRL_0_BASEADDR
 
 #define GPIO_FIR_BYPASS_MUX XPAR_HIER_MODULATION_CAPTURE_AXI_GPIO_BYPASS_FIR_M10_BASEADDR
+#define GPIO_FIR_BYPASS_MUX2 XPAR_HIER_MODULATION_CAPTURE2_AXI_GPIO_BYPASS_FIR_M10_BASEADDR
+#define GPIO_RRC_BYPASS_MUX XPAR_AXI_GPIO_RRC_BYPASS1_BASEADDR
+#define GPIO_RRC_BYPASS_MUX2 XPAR_AXI_GPIO_RRC_BYPASS2_BASEADDR
 
 // FIR bypass selection
 // 0 = FIR enabled
@@ -290,8 +293,11 @@ int main(void) {
   }
 
   Xil_Out32(GPIO_FIR_BYPASS_MUX, FIR_BYPASS);
+  Xil_Out32(GPIO_FIR_BYPASS_MUX2, FIR_BYPASS);
+  Xil_Out32(GPIO_RRC_BYPASS_MUX, FIR_BYPASS);
+  Xil_Out32(GPIO_RRC_BYPASS_MUX2, FIR_BYPASS);
 
-  xil_printf("\r\nADC FIR configuration: ");
+  xil_printf("\r\nADC FIR+RRC configuration: ");
 
   if (FIR_BYPASS) {
     xil_printf("BYPASSED\r\n");
@@ -300,6 +306,9 @@ int main(void) {
   }
 
   xil_printf("FIR bypass GPIO readback = %lu\r\n", Xil_In32(GPIO_FIR_BYPASS_MUX) & 0x1);
+  xil_printf("FIR bypass GPIO readback = %lu\r\n", Xil_In32(GPIO_FIR_BYPASS_MUX2) & 0x1);
+  xil_printf("RRC bypass GPIO readback = %lu\r\n", Xil_In32(GPIO_RRC_BYPASS_MUX) & 0x1);
+  xil_printf("RRC bypass GPIO readback = %lu\r\n", Xil_In32(GPIO_RRC_BYPASS_MUX2) & 0x1);
 
   /////////////////////////////////////////////////////////////////////////////////
   // Display various configurations/status of RFDC

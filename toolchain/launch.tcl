@@ -1,69 +1,93 @@
-# Launch the ZCU208 application over JTAG with XSDB.
+# ZCU208 JTAG launch: initialize the PS with an A53 FSBL, then run the app.
+# Place this file in the project root alongside hardware/ and vitis_workspace/.
+# Use the matching, unstripped A53 FSBL built by zcu208_platform.
 
 set project_root [file dirname [file normalize [info script]]]
-
 set bit_file [file join $project_root hardware zcu208_modulation_v6_adc_rrc_bypass.bit]
-set ps_init_file [file join $project_root hardware psu_init.tcl]
-set elf_file [file join $project_root vitis_workspace rfsoc_app build rfsoc_app.elf]
+set xsa_file [file join $project_root hardware zcu208_modulation_v6_adc_rrc_bypass.xsa]
+set fsbl_file [file join $project_root vitis_workspace zcu208_platform zynqmp_fsbl build fsbl.elf]
+set app_file [file join $project_root vitis_workspace rfsoc_app build rfsoc_app.elf]
 
-# If your build printed a different ELF path, edit elf_file above.
 foreach {description path} [list \
     "Bitstream" $bit_file \
-    "PS initialization script" $ps_init_file \
-    "Application ELF" $elf_file] {
-
+    "Hardware design" $xsa_file \
+    "FSBL ELF" $fsbl_file \
+    "Application ELF" $app_file] {
     if {![file isfile $path]} {
         error "$description not found: $path"
     }
-
     puts "$description: $path"
 }
 
-puts "\nConnecting to local hardware server..."
+puts "\nConnecting to hardware..."
 connect
-
-puts "\nAvailable targets:"
 puts [targets]
 
-# Halt an earlier run before changing the FPGA configuration. After a
-# JTAG-mode power-up, A53 #0 can instead already be stopped or in reset.
-targets -set -nocase -filter {name =~ "*A53*#0"}
+puts "\nResetting the system..."
+targets -set -nocase -filter {name =~ "APU*"}
+rst -system
+after 3000
 
-if {[catch {stop} stop_message]} {
-    if {![regexp -nocase \
-        {already stopped|already suspended|not running|in reset|is reset|reset asserted} \
-        $stop_message]} {
-
-        error "Could not halt Cortex-A53 #0: $stop_message"
-    }
-
-    puts "A53 #0 is already stopped or in reset: $stop_message"
-}
-
-# Use the PSU target for PL and PS setup.
+puts "\nProgramming PL..."
 targets -set -nocase -filter {name =~ "PSU"}
-
-puts "\nProgramming the PL bitstream..."
 fpga -file $bit_file
 
-puts "\nInitializing the processing system..."
-source $ps_init_file
-psu_init
+puts "\nLoading the hardware memory map..."
+targets -set -nocase -filter {name =~ "APU*"}
+loadhw -hw $xsa_file
 
-# Remove PS-to-PL isolation and release PL resets for AXI access.
-after 1000
-psu_ps_pl_isolation_removal
-after 1000
-psu_ps_pl_reset_config
+# Match the debugger's ability to access memory before PS initialization.
+set saved_force_access [configparams force-mem-accesses]
+configparams force-mem-accesses 1
 
-puts "\nResetting Cortex-A53 #0..."
-targets -set -nocase -filter {name =~ "*A53*#0"}
-rst -processor
+try {
+    set mode [expr {[lindex [mrd -force -value 0xFF5E0200] 0] & 0xF}]
+    puts [format "\nBoot mode: 0x%X" $mode]
+    if {$mode != 0} {
+        error "Expected JTAG boot mode (0). Check boot switches and power-cycle."
+    }
 
-puts "\nDownloading application ELF..."
-dow $elf_file
+    puts "\nResetting Cortex-A53 #0 and loading FSBL..."
+    targets -set -nocase -filter {name =~ "*A53*#0"}
+    rst -processor
+    dow $fsbl_file
 
-puts "\nStarting Cortex-A53 #0..."
-con
+    puts "\nRunning FSBL until XFsbl_Exit..."
+    set fsbl_bp [bpadd -addr &XFsbl_Exit]
+    if {[catch {con -block -timeout 60} run_error]} {
+        catch {stop}
+        catch {bpremove $fsbl_bp}
+        error "FSBL failed to halt within 60 seconds or could not run: $run_error"
+    }
 
-puts "\nLaunch commands completed. Check the serial terminal for application output."
+    # A blocked continue can return for reasons other than our breakpoint.
+    if {[catch {bpstatus $fsbl_bp} bp_info]} {
+        catch {bpremove $fsbl_bp}
+        error "Could not check FSBL breakpoint: $bp_info"
+    }
+    puts "FSBL breakpoint status: $bp_info"
+    if {![regexp -nocase {HitCount[[:space:]:]+([0-9]+)} $bp_info -> hits] || $hits < 1} {
+        catch {bpremove $fsbl_bp}
+        error "A53 stopped, but the XFsbl_Exit breakpoint was not confirmed."
+    }
+    bpremove $fsbl_bp
+
+    # Standard ZynqMP FSBL reports completion as 0 in this register and
+    # writes a nonzero code on an error path. XFsbl_Exit alone is not enough.
+    set fsbl_status [lindex [mrd -force -value 0xFFD80060] 0]
+    puts [format "FSBL status register: 0x%08X" $fsbl_status]
+    if {$fsbl_status != 0} {
+        error "FSBL reported a nonzero status. Check the UART and FSBL configuration."
+    }
+
+    puts "\nResetting Cortex-A53 #0 and loading the application..."
+    targets -set -nocase -filter {name =~ "*A53*#0"}
+    rst -processor
+    dow $app_file
+
+    puts "\nStarting application..."
+    con
+    puts "\nApplication started. Check the PS UART for output."
+} finally {
+    configparams force-mem-accesses $saved_force_access
+}

@@ -7,11 +7,11 @@ clc;
 % User settings
 % ============================================================
 
-tile = 0;
+tile = 1;
 channel = 0;
 
 fc = 640e6;            % 640 MHz raw DAC tone
-amplitude_dbfs = -3;  % -3 dBFS
+amplitude_dbfs = -3;  % -3 dBFS, -8.71dBm (1.1Ghz), -5.66dBm (640 MHz)
 phase_deg = 0;         % 0 degree phase
 interpolation = 1;
 
@@ -19,7 +19,7 @@ interpolation = 1;
 % Connect to RFSoC
 % ============================================================
 
-rf = RFSoC("COM13");
+rf = RFSoC("COM5");
 
 fprintf("Connecting to RFSoC...\n");
 rf.connect();
@@ -30,13 +30,7 @@ rf.connect();
 
 fprintf("Generating waveform...\n");
 
-result = rf.generateRawTone( ...
-    tile, ...
-    channel, ...
-    fc, ...
-    amplitude_dbfs, ...
-    phase_deg, ...
-    interpolation);
+result = rf.generateRawTone(tile, channel, fc, amplitude_dbfs, phase_deg, interpolation);
 
 fprintf("\nWaveform loaded:\n");
 fprintf("  DAC          = Tile %d Channel %d\n", tile, channel);

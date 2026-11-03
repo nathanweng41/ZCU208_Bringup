@@ -149,8 +149,8 @@ if debug
     title('FFT of float (should be single bin)');
     xlabel('MHz'); ylabel('dB')
 
-    phi_float_deg = wrapTo180(rad2deg(angle(Xf(k_tone))) + 90); % +90 to account for sin vs cos
-    phi_i16_deg   = wrapTo180(rad2deg(angle(Xi(k_tone))) + 90); % +90 to account for sin vs cos
+    phi_float_deg = rad2deg(angle(Xf(k_tone)));
+    phi_i16_deg   = rad2deg(angle(Xi(k_tone)));
 
     fprintf("Analog tone phase: %.3f\n", phi_float_deg);
     fprintf("Quantized tone phase: %.3f\n", phi_i16_deg);

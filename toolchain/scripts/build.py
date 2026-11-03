@@ -4,7 +4,7 @@ import vitis
 
 
 # ------------------------------------------------------------
-# Paths and component names
+# Paths and component names -- CHANGE THIS between each runs
 # ------------------------------------------------------------
 
 # Run this script from the project root, containing hardware/ and src/.

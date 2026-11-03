@@ -9,7 +9,8 @@ Each version below corresponds to a specific XSA hardware design.
 ### Features
 - **DAC:** Added 4 extra continuous waveform DACs running at 6.4 GSPS
 - **BRAM Size:** Change modulation DACs' BRAMs to 32kB 
-- **UramPlay/UramStop Behavior:** UramPlay/UramStop behaviors are not synchronized to PL clk anymore. 
+- **UramPlay/UramStop Behavior:** UramPlay/UramStop behaviors are not synchronized to PL clk anymore
+- **ADC:** Added option to bypass ADC RRCs
 
 ### Bug Fixes
 - **UramStop Behavior:** Write zeros to RFDC which stops playing Uram

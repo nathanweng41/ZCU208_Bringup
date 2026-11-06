@@ -5,8 +5,10 @@
 set project_root [file dirname [file normalize [info script]]]
 set bit_file [file join $project_root hardware zcu208_modulation_v6_adc_rrc_bypass.bit]
 set xsa_file [file join $project_root hardware zcu208_modulation_v6_adc_rrc_bypass.xsa]
-set fsbl_file [file join $project_root vitis_workspace zcu208_platform zynqmp_fsbl build fsbl.elf]
-set app_file [file join $project_root vitis_workspace rfsoc_app build rfsoc_app.elf]
+
+set workspace {C:/Xilinx/vitis_workspace}
+set fsbl_file [file join $workspace zcu208_platform zynqmp_fsbl build fsbl.elf]
+set elf_file  [file join $workspace rfsoc_app build rfsoc_app.elf]
 
 foreach {description path} [list \
     "Bitstream" $bit_file \

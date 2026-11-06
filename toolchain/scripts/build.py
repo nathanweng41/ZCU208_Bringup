@@ -17,7 +17,7 @@ XSA_FILE = (
 )
 
 SOURCE_DIR = ROOT / "src"
-WORKSPACE = ROOT / "vitis_workspace"
+WORKSPACE = Path(r"C:\Xilinx\vitis_workspace")
 
 PLATFORM_NAME = "zcu208_platform"
 DOMAIN_NAME = "standalone_psu_cortexa53_0"

@@ -3,8 +3,8 @@
 # Use the matching, unstripped A53 FSBL built by zcu208_platform.
 
 set project_root [file dirname [file normalize [info script]]]
-set bit_file [file join $project_root hardware zcu208_modulation_v6_adc_rrc_bypass.bit]
-set xsa_file [file join $project_root hardware zcu208_modulation_v6_adc_rrc_bypass.xsa]
+set bit_file [file join $project_root hardware zcu208_modulation_v6_rrc_bypass_2.bit]
+set xsa_file [file join $project_root hardware zcu208_modulation_v6_rrc_bypass_2.xsa]
 
 set workspace {C:/Xilinx/vitis_workspace}
 set fsbl_file [file join $workspace zcu208_platform zynqmp_fsbl build fsbl.elf]

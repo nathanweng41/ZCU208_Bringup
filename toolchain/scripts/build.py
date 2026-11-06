@@ -13,15 +13,15 @@ ROOT = Path.cwd()
 XSA_FILE = (
     ROOT
     / "hardware"
-    / "zcu208_modulation_v6_adc_rrc_bypass.xsa"
+    / "zcu208_modulation_v6_rrc_bypass_2.xsa"
 )
 
 SOURCE_DIR = ROOT / "src"
 WORKSPACE = Path(r"C:\Xilinx\vitis_workspace")
 
-PLATFORM_NAME = "zcu208_platform"
+PLATFORM_NAME = "zcu208_platform_2"
 DOMAIN_NAME = "standalone_psu_cortexa53_0"
-APP_NAME = "rfsoc_app"
+APP_NAME = "rfsoc_app_2"
 
 PLATFORM_DIR = WORKSPACE / PLATFORM_NAME
 APP_DIR = WORKSPACE / APP_NAME

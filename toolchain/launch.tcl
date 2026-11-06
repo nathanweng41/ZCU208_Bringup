@@ -1,5 +1,5 @@
 # ZCU208 JTAG launch: initialize the PS with an A53 FSBL, then run the app.
-# Place this file in the project root alongside hardware/ and vitis_workspace/.
+# Place this file in the project root alongside hardware/
 # Use the matching, unstripped A53 FSBL built by zcu208_platform.
 
 set project_root [file dirname [file normalize [info script]]]
@@ -8,7 +8,7 @@ set xsa_file [file join $project_root hardware zcu208_modulation_v6_adc_rrc_bypa
 
 set workspace {C:/Xilinx/vitis_workspace}
 set fsbl_file [file join $workspace zcu208_platform zynqmp_fsbl build fsbl.elf]
-set elf_file  [file join $workspace rfsoc_app build rfsoc_app.elf]
+set app_file  [file join $workspace rfsoc_app build rfsoc_app.elf]
 
 foreach {description path} [list \
     "Bitstream" $bit_file \
